@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.env
+*.sqlite3
+
+# Swift / Xcode
+DerivedData/
+*.xcworkspace
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+
+# Docker
+*.log
+
+# MacOS
+.DS_Store
+
+# General
+*.swp
+*.tmp
