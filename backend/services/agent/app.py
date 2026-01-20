@@ -1,17 +1,15 @@
 # services/agent/app.py
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import logging
 import os
-import requests
+from datetime import datetime
+from typing import List, Dict
+
 import httpx
 import psycopg2
-from psycopg2.extras import RealDictCursor
 import redis
-from typing import List, Dict, Optional
-import logging
-import json
-from datetime import datetime
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
