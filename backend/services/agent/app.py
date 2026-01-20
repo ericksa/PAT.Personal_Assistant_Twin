@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,15 @@ app.add_middleware(
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://llm:llm@postgres:5432/llm")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mlx")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "OLLAMA_BASE_URL: http://host.docker.internal:11434")
 INGEST_SERVICE_URL = "http://ingest-service:8000"
 TOP_K = int(os.getenv("TOP_K", "5"))
 SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.2"))
 
 # Initialize clients
 redis_client = redis.from_url(REDIS_URL)
+resume_generator = None
+
 
 
 class QueryRequest(BaseModel):
@@ -212,6 +215,60 @@ Answer:"""
             return "Error communicating with Ollama"
     else:
         return f"Unsupported LLM provider: {LLM_PROVIDER}"
+
+
+# Add new endpoint for resume generation
+@app.post("/generate-resume")
+async def generate_resume(request: dict):
+    """Generate customized resume for specific job"""
+    try:
+        # Get resume data from database
+        resume_data = await get_latest_resume()
+
+        if not resume_data:
+            raise HTTPException(status_code=404, detail="No resume found")
+
+        # Generate customized resume
+        job_description = request.get("job_description", "")
+        template_type = request.get("template_type", "chronological")
+
+        if resume_generator:
+            customized_resume = resume_generator.generate_resume(
+                resume_data,
+                job_description,
+                template_type
+            )
+
+            return {
+                "status": "success",
+                "resume": customized_resume,
+                "message": "Resume generated successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Resume generator not available")
+
+    except Exception as e:
+        logger.error(f"Resume generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Resume generation failed: {str(e)}")
+
+
+async def get_latest_resume():
+    """Get the most recent resume from database"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{INGEST_SERVICE_URL}/resumes",
+                timeout=30
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("resumes"):
+                    # Return the latest resume data
+                    return data["resumes"][0].get("metadata", {}).get("resume_data", {})
+        return None
+    except Exception as e:
+        logger.error(f"Get resume error: {e}")
+        return None
 
 
 @app.get("/health")

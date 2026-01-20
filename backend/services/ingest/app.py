@@ -1,4 +1,3 @@
-# services/ingest/app.py
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -12,9 +11,8 @@ import redis
 import uuid
 from typing import List, Dict
 import logging
-from PyPDF2 import PdfReader
-from docx import Document
-import numpy as np
+from datetime import datetime
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,11 +45,61 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "120"))
 # Global variables for models (lazy loading)
 minio_client = None
 embedding_model = None
+redis_client = None
+
+
+class OllamaEmbeddingClient:
+    def __init__(self, base_url: str, model: str):
+        self.base_url = base_url
+        self.model = model
+
+    async def embed(self, texts):
+        """Generate embeddings for texts"""
+        if isinstance(texts, str):
+            texts = [texts]
+
+        embeddings = []
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                for text in texts:
+                    resp = await client.post(
+                        f"{self.base_url}/api/embeddings",
+                        json={"model": self.model, "prompt": text},
+                        timeout=60
+                    )
+                    resp.raise_for_status()
+                    embeddings.append(resp.json()["embedding"])
+            return embeddings
+        except Exception as e:
+            logger.error(f"Error generating embeddings: {e}")
+            raise
+
+
+# Data models
+class DocumentMetadata(BaseModel):
+    filename: str
+    content_type: str
+    size: int
+    bucket: str
+
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+class SearchResult(BaseModel):
+    document_id: str
+    content: str
+    filename: str
+    similarity: float
+    metadata: Dict
 
 
 def initialize_clients():
     """Initialize external clients"""
-    global minio_client
+    global minio_client, redis_client
     try:
         minio_client = Minio(
             MINIO_URL.replace("http://", "").replace("https://", ""),
@@ -75,54 +123,43 @@ def initialize_clients():
     except Exception as e:
         logger.error(f"Failed to initialize MinIO client: {e}")
 
+    # Initialize Redis
+    try:
+        redis_client = redis.from_url(REDIS_URL)
+        logger.info("Redis client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Redis client: {e}")
+
 
 def initialize_embedding_model():
-    """Initialize embedding model with fallback"""
+    """Initialize embedding model using Ollama embeddings"""
     global embedding_model
+    ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+    ollama_embedding_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+
     try:
-        from sentence_transformers import SentenceTransformer
-        logger.info(f"Loading embedding model: {EMBEDDING_MODEL}")
-        embedding_model = SentenceTransformer(EMBEDDING_MODEL)
-        logger.info("Embedding model loaded successfully")
+        embedding_model = OllamaEmbeddingClient(ollama_base_url, ollama_embedding_model)
+        logger.info(f"Using Ollama embedding model: {ollama_embedding_model}")
     except Exception as e:
-        logger.warning(f"Failed to load embedding model {EMBEDDING_MODEL}: {e}")
-        logger.info("Falling back to simpler model...")
-        try:
-            from sentence_transformers import SentenceTransformer
-            embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Fallback model loaded successfully")
-        except Exception as e2:
-            logger.error(f"Failed to load fallback model: {e2}")
-
-            # Create a mock model for testing
-            class MockEmbeddingModel:
-                def encode(self, text):
-                    # Return random embeddings for testing
-                    import numpy as np
-                    return np.random.rand(384).tolist()
-
-            embedding_model = MockEmbeddingModel()
-            logger.warning("Using mock embedding model for testing")
+        logger.error(f"Failed to initialize Ollama embedding client: {e}")
+        raise
 
 
-class DocumentMetadata(BaseModel):
-    filename: str
-    content_type: str
-    size: int
-    bucket: str
+def extract_text_from_pdf(pdf_content: bytes) -> str:
+    """Extract text from PDF content"""
+    try:
+        from PyPDF2 import PdfReader
+        import io as pyio
 
-
-class SearchRequest(BaseModel):
-    query: str
-    top_k: int = 5
-
-
-class SearchResult(BaseModel):
-    document_id: str
-    content: str
-    filename: str
-    similarity: float
-    metadata: Dict
+        pdf_file = pyio.BytesIO(pdf_content)
+        pdf_reader = PdfReader(pdf_file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        return text.strip()
+    except Exception as e:
+        logger.warning(f"Could not extract text from PDF: {e}")
+        return "Binary file content - text extraction failed"
 
 
 @app.on_event("startup")
@@ -132,8 +169,6 @@ async def startup_event():
 
     # Initialize clients
     initialize_clients()
-
-    # Initialize embedding model
     initialize_embedding_model()
 
     # Initialize database schema
@@ -141,23 +176,50 @@ async def startup_event():
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
 
-        # Create documents table with proper vector dimension
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS documents (
-                id UUID PRIMARY KEY,
-                filename VARCHAR(255),
-                content TEXT,
-                embedding VECTOR(768),  -- BGE model uses 768 dimensions
-                metadata JSONB,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        # Enable pgvector extension
+        try:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            conn.commit()
+            logger.info("pgvector extension enabled")
+        except Exception as e:
+            logger.warning(f"Could not enable pgvector extension: {e}")
+            logger.info("Continuing without vector support...")
 
-        # Create index
-        cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_documents_embedding 
-            ON documents USING ivfflat (embedding vector_cosine_ops)
-        """)
+        # Create documents table
+        try:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id UUID PRIMARY KEY,
+                    filename VARCHAR(255),
+                    content TEXT,
+                    embedding VECTOR(768),  -- BGE model uses 768 dimensions
+                    metadata JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        except Exception as e:
+            logger.warning(f"Could not create table with VECTOR type: {e}")
+            # Fallback to TEXT for embedding
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id UUID PRIMARY KEY,
+                    filename VARCHAR(255),
+                    content TEXT,
+                    embedding TEXT,  -- Fallback to TEXT
+                    metadata JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            logger.info("Created table with TEXT embedding (fallback mode)")
+
+        # Create index if vector is available
+        try:
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_embedding 
+                ON documents USING ivfflat (embedding vector_cosine_ops)
+            """)
+        except Exception as e:
+            logger.warning(f"Could not create vector index: {e}")
 
         conn.commit()
         cur.close()
@@ -172,12 +234,74 @@ async def startup_event():
 async def upload_document(file: UploadFile = File(...)):
     """Upload document to MinIO and process"""
     try:
+        logger.info(f"Uploading document: {file.filename}")
+
         # Generate unique ID
         doc_id = str(uuid.uuid4())
 
         # Read file content
         file_content = await file.read()
         file_size = len(file_content)
+
+        # Extract text content based on file type
+        content_str = ""
+        if file.content_type == "application/pdf":
+            content_str = extract_text_from_pdf(file_content)
+            logger.info(f"Extracted {len(content_str)} characters from PDF")
+        else:
+            # Handle text files
+            try:
+                content_str = file_content.decode('utf-8', errors='ignore')
+            except Exception as e:
+                logger.warning(f"Could not decode as UTF-8, treating as binary: {e}")
+                content_str = f"Binary file content ({file.content_type}) - {len(file_content)} bytes"
+
+        # Generate embedding
+        embedding_str = "[]"
+        if embedding_model and content_str:
+            try:
+                # Only generate embedding if we have text content
+                if content_str.strip():
+                    embeddings = await embedding_model.embed([content_str])
+                    embedding_vector = embeddings[0] if embeddings else []
+                    embedding_str = json.dumps(embedding_vector)
+                    logger.info(f"Generated embedding with {len(embedding_vector)} dimensions")
+                else:
+                    logger.info("No text content to embed")
+            except Exception as e:
+                logger.error(f"Error generating embedding: {e}")
+                embedding_str = "[]"
+
+        # Store in database
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+
+        cur.execute("""
+            INSERT INTO documents (id, filename, content, embedding, metadata)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            doc_id,
+            file.filename,
+            content_str,
+            embedding_str,
+            json.dumps({
+                "content_type": file.content_type or "application/octet-stream",
+                "size": file_size,
+                "uploaded_at": str(datetime.now())
+            })
+        ))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        # Store embedding in Redis
+        if redis_client and embedding_str != "[]" and embedding_str != '"[]"':
+            try:
+                redis_client.set(f"embedding:{doc_id}", embedding_str)
+                logger.info(f"Stored embedding in Redis for document {doc_id}")
+            except Exception as e:
+                logger.warning(f"Failed to store embedding in Redis: {e}")
 
         # Upload to MinIO if client is available
         if minio_client:
@@ -189,17 +313,16 @@ async def upload_document(file: UploadFile = File(...)):
                     file_size,
                     content_type=file.content_type or "application/octet-stream"
                 )
-                logger.info(f"Uploaded document: {file.filename} ({file_size} bytes)")
+                logger.info(f"Uploaded document to MinIO: {file.filename} ({file_size} bytes)")
             except Exception as e:
                 logger.warning(f"MinIO upload failed: {e}")
 
-        # For now, return success without processing (to avoid embedding issues)
         return {
             "document_id": doc_id,
             "filename": file.filename,
             "size": file_size,
             "status": "uploaded",
-            "message": "Document uploaded successfully"
+            "message": "Document uploaded and processed successfully"
         }
 
     except Exception as e:
@@ -209,18 +332,83 @@ async def upload_document(file: UploadFile = File(...)):
 
 @app.post("/search")
 async def search_documents(request: SearchRequest):
-    """Simple search endpoint (placeholder)"""
+    """Search documents using embeddings"""
     try:
-        # Return mock results for now
-        return [
-            SearchResult(
-                document_id=str(uuid.uuid4()),
-                content="This is a mock search result. Document processing will be implemented.",
-                filename="mock-document.txt",
-                similarity=0.8,
-                metadata={}
-            )
-        ]
+        logger.info(f"Searching for: {request.query}")
+
+        # Generate query embedding
+        query_embedding = []
+        if embedding_model:
+            try:
+                embeddings = await embedding_model.embed([request.query])
+                query_embedding = embeddings[0] if embeddings else []
+                logger.info(f"Generated query embedding with {len(query_embedding)} dimensions")
+            except Exception as e:
+                logger.error(f"Error generating query embedding: {e}")
+
+        # Connect to database
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Try vector search first if we have query embedding
+        if query_embedding:
+            try:
+                query_embedding_str = json.dumps(query_embedding)
+                cur.execute("""
+                    SELECT id, filename, content, metadata,
+                           embedding <-> %s::vector as distance
+                    FROM documents 
+                    WHERE embedding != '[]' AND embedding IS NOT NULL AND embedding != '"[]"'
+                    ORDER BY distance ASC
+                    LIMIT %s
+                """, (query_embedding_str, request.top_k))
+
+                results = cur.fetchall()
+
+                search_results = []
+                for row in results:
+                    search_results.append(SearchResult(
+                        document_id=str(row['id']),
+                        content=row['content'][:500] + ("..." if len(row['content']) > 500 else ""),
+                        filename=row['filename'],
+                        similarity=max(0, 1 - float(row['distance'])) if row['distance'] else 0.0,
+                        metadata=row['metadata'] if row['metadata'] else {}
+                    ))
+
+                if search_results:
+                    cur.close()
+                    conn.close()
+                    return search_results
+
+            except Exception as e:
+                logger.warning(f"Vector search failed, falling back to text search: {e}")
+
+        # Text-based search fallback
+        search_pattern = f"%{request.query}%"
+        cur.execute("""
+            SELECT id, filename, content, metadata
+            FROM documents 
+            WHERE content ILIKE %s OR filename ILIKE %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (search_pattern, search_pattern, request.top_k))
+
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        search_results = []
+        for row in results:
+            search_results.append(SearchResult(
+                document_id=str(row['id']),
+                content=row['content'][:500] + ("..." if len(row['content']) > 500 else ""),
+                filename=row['filename'],
+                similarity=0.5,  # Default similarity for text search
+                metadata=row['metadata'] if row['metadata'] else {}
+            ))
+
+        return search_results
+
     except Exception as e:
         logger.error(f"Search error: {e}")
         return []
@@ -239,13 +427,15 @@ async def health_check():
 
     minio_healthy = minio_client is not None
     embedding_healthy = embedding_model is not None
+    redis_healthy = redis_client is not None
 
     return {
-        "status": "healthy" if all([db_healthy, minio_healthy]) else "degraded",
+        "status": "healthy" if all([db_healthy, minio_healthy, embedding_healthy, redis_healthy]) else "degraded",
         "services": {
             "database": "healthy" if db_healthy else "unhealthy",
             "minio": "healthy" if minio_healthy else "unhealthy",
-            "embedding": "healthy" if embedding_healthy else "unhealthy"
+            "embedding": "healthy" if embedding_healthy else "unhealthy",
+            "redis": "healthy" if redis_healthy else "unhealthy"
         }
     }
 
