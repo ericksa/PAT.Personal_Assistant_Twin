@@ -75,6 +75,44 @@ class OllamaEmbeddingClient:
             logger.error(f"Error generating embeddings: {e}")
             raise
 
+async def get_ai_response(query: str, context: str) -> str:
+    """Get AI response using configured LLM provider"""
+    prompt = f"""You are PAT (Personal Assistant Twin). Use the following information to answer the user's question.
+
+Context Information:
+{context}
+
+Question: {query}
+
+Answer:"""
+
+    if LLM_PROVIDER == "ollama":
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{OLLAMA_BASE_URL}/api/generate",
+                    json={
+                        "model": "llama2",  # or "llama3" if you have it
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.7,
+                            "top_p": 0.9
+                        }
+                    },
+                    timeout=120
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("response", "No response from Ollama")
+                else:
+                    return f"Unable to get response from Ollama: {response.status_code}"
+        except Exception as e:
+            logger.error(f"Ollama error: {e}")
+            return f"Error communicating with Ollama: {str(e)}"
+    else:
+        return f"Using basic response for query: {query}"
+
 
 # Data models
 class DocumentMetadata(BaseModel):
