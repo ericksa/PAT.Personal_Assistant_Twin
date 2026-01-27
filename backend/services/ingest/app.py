@@ -372,17 +372,7 @@ async def upload_document(file: UploadFile = File(...)):
 async def search_documents(request: SearchRequest):
     """Search documents using embeddings"""
     try:
-        logger.info(f"Searching for: {request.query}")
-
-        # Generate query embedding
-        query_embedding = []
-        if embedding_model:
-            try:
-                embeddings = await embedding_model.embed([request.query])
-                query_embedding = embeddings[0] if embeddings else []
-                logger.info(f"Generated query embedding with {len(query_embedding)} dimensions")
-            except Exception as e:
-                logger.error(f"Error generating query embedding: {e}")
+        # ... (code before this point is fine) ...
 
         # Connect to database
         conn = psycopg2.connect(DATABASE_URL)
@@ -396,7 +386,8 @@ async def search_documents(request: SearchRequest):
                     SELECT id, filename, content, metadata,
                            embedding <-> %s::vector as distance
                     FROM documents 
-                    WHERE embedding != '[]' AND embedding IS NOT NULL AND embedding != '"[]"'
+                    -- FIX 1: Use vector_dims() to check for non-empty vectors
+                    WHERE vector_dims(embedding) > 0 
                     ORDER BY distance ASC
                     LIMIT %s
                 """, (query_embedding_str, request.top_k))
@@ -414,14 +405,17 @@ async def search_documents(request: SearchRequest):
                     ))
 
                 if search_results:
+                    # Close connection only when returning successfully
                     cur.close()
                     conn.close()
                     return search_results
 
             except Exception as e:
                 logger.warning(f"Vector search failed, falling back to text search: {e}")
+                # FIX 2: Rollback the aborted transaction to allow further queries
+                conn.rollback()
 
-        # Text-based search fallback
+        # Text-based search fallback (this will now work)
         search_pattern = f"%{request.query}%"
         cur.execute("""
             SELECT id, filename, content, metadata
@@ -432,6 +426,8 @@ async def search_documents(request: SearchRequest):
         """, (search_pattern, search_pattern, request.top_k))
 
         results = cur.fetchall()
+
+        # Always close your connection and cursor
         cur.close()
         conn.close()
 
@@ -448,9 +444,9 @@ async def search_documents(request: SearchRequest):
         return search_results
 
     except Exception as e:
+        # This outer catch will handle other errors, like connection failure
         logger.error(f"Search error: {e}")
         return []
-
 
 @app.get("/health")
 async def health_check():

@@ -1,0 +1,204 @@
+//
+//  MessageRow.swift
+//  PATclient
+//
+//  Created by Adam Erickson on 1/22/26.
+//
+
+import SwiftUI
+
+struct MessageRow: View {
+    let message: Message
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            avatarView
+            
+            VStack(alignment: .leading, spacing: 4) {
+                messageHeader
+                
+                messageContent
+                
+                if !message.sources.isEmpty {
+                    sourcesView
+                }
+                
+                if !message.toolsUsed.isEmpty {
+                    toolsView
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+    }
+    
+    @ViewBuilder
+    private var avatarView: some View {
+        ZStack {
+            Circle()
+                .fill(avatarColor)
+                .frame(width: 36, height: 36)
+            
+            Text(avatarEmoji)
+                .font(.system(size: 18))
+        }
+    }
+    
+    @ViewBuilder
+    private var messageHeader: some View {
+        HStack(spacing: 8) {
+            Text(messageHeaderTitle)
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            if message.type == .assistant {
+                if !message.modelUsed.isEmpty {
+                    Text("• \(message.modelUsed)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                if message.processingTime > 0 {
+                    Text("• \(String(format: "%.2f", message.processingTime))s")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            Text(message.timestamp, style: .time)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    @ViewBuilder
+    private var messageContent: some View {
+        Text(message.content)
+            .font(.body)
+            .foregroundColor(.primary)
+            .textSelection(.enabled)
+    }
+    
+    @ViewBuilder
+    private var sourcesView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Sources:")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+            
+            ForEach(message.sources) { source in
+                HStack(spacing: 6) {
+                    Image(systemName: sourceIcon(for: source))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    if let url = source.url, !url.isEmpty,
+                       let nsURL = URL(string: url) {
+                        Link(source.displayName, destination: nsURL)
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    } else {
+                        Text(source.displayName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    if let score = source.score {
+                        Text(String(format: "%.2f", score))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.top, 8)
+    }
+    
+    @ViewBuilder
+    private var toolsView: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "wrench.and.screwdriver")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            
+            Text("Tools: \(message.toolsUsed.joined(separator: ", "))")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.top, 4)
+    }
+    
+    private var avatarColor: Color {
+        switch message.type {
+        case .user:
+            return .blue
+        case .assistant:
+            return .green
+        case .system:
+            return .gray
+        }
+    }
+    
+    private var avatarEmoji: String {
+        switch message.type {
+        case .user:
+            return "👤"
+        case .assistant:
+            return "🤖"
+        case .system:
+            return "⚙️"
+        }
+    }
+    
+    private var messageHeaderTitle: String {
+        switch message.type {
+        case .user:
+            return "You"
+        case .assistant:
+            return "PAT"
+        case .system:
+            return "System"
+        }
+    }
+    
+    private func sourceIcon(for source: Source) -> String {
+        switch source.sourceType {
+        case .web:
+            return "globe"
+        case .document:
+            return "doc.text"
+        case .unknown:
+            return "questionmark.circle"
+        }
+    }
+}
+
+#Preview {
+    VStack(spacing: 0) {
+        MessageRow(message: Message(
+            type: .user,
+            content: "What is the current weather in San Francisco?",
+            timestamp: Date()
+        ))
+        
+        Divider()
+        
+        MessageRow(message: Message(
+            type: .assistant,
+            content: "Based on current information, the weather in San Francisco is typically around 60-70°F during the day.",
+            timestamp: Date(),
+            sources: [
+                Source(url: "https://weather.com", title: "Weather.com", source: "web", score: 0.95),
+                Source(filename: "sf_weather_notes.txt", content: "Weather notes...",  source: "document", score: 0.87)
+            ],
+            toolsUsed: ["web"],
+            modelUsed: "llama2",
+            processingTime: 2.34
+        ))
+    }
+}
