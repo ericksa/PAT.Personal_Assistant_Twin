@@ -3,11 +3,10 @@ import logging
 import os
 from datetime import datetime
 from typing import List, Dict
-
-import httpx
+from fastapi import FastAPI, HTTPException
+import httpx, uuid, os
 import psycopg2
 import redis
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -20,7 +19,7 @@ app = FastAPI(
     description="AI agent with RAG, web search, and tool orchestration",
     version="1.0.0"
 )
-
+AGENT_URL = os.getenv("AGENT_URL", "http://agent-service:8000")
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
@@ -270,6 +269,13 @@ async def get_latest_resume():
         logger.error(f"Get resume error: {e}")
         return None
 
+@app.post("/tool/generate_resume")
+async def generate_resume(payload: dict):
+    """OpenWebUI will call this when the LLM wants a customised résumé."""
+    resp = await httpx.post(f"{AGENT_URL}/generate-resume", json=payload, timeout=120)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Agent error")
+    return resp.json()
 
 @app.get("/health")
 async def health_check():

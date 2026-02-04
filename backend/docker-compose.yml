@@ -1,7 +1,8 @@
+
 services:
-  # ----------------------------
-  # PostgreSQL + pgvector
-  # ----------------------------
+  # -------------------------------------------------
+  # Core data services (already in your stack)
+  # -------------------------------------------------
   postgres:
     image: pgvector/pgvector:pg17
     container_name: pgvector
@@ -13,54 +14,22 @@ services:
     volumes:
       - .scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
       - pgdata:/var/lib/postgresql/data
-
-    ports:
-      - "5432:5432"
+    ports: ["5432:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U llm"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ----------------------------
-  # Redis (cache, agent memory)
-  # ----------------------------
   redis:
     image: redis:7
     container_name: redis
     restart: unless-stopped
     command: redis-server --save 60 1 --loglevel warning
-    ports:
-      - "6379:6379"
+    ports: ["6379:6379"]
     volumes:
       - redisdata:/data
 
-  # ----------------------------
-  # n8n (workflow orchestration)
-  # ----------------------------
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: n8n
-    restart: unless-stopped
-    ports:
-      - "5678:5678"
-    environment:
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
-      N8N_HOST: localhost
-      N8N_PORT: 5678
-      N8N_PROTOCOL: http
-      WEBHOOK_URL: http://localhost:5678/
-      GENERIC_TIMEZONE: America/New_York
-    volumes:
-      - n8ndata:/home/node/.n8n
-    depends_on:
-      - postgres
-
-  # ----------------------------
-  # MinIO (Object Storage)
-  # ----------------------------
   minio:
     image: minio/minio:latest
     container_name: minio
@@ -69,29 +38,40 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"  # S3 API
-      - "9001:9001"  # Console UI
+    ports: ["9000:9000","9001:9001"]
     volumes:
       - miniodata:/data
 
-  # ----------------------------
-  # Ingest Service
-  # ----------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports: ["5678:5678"]
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      WEBHOOK_URL: http://localhost:5678/
+    volumes:
+      - n8ndata:/home/node/.n8n
+    depends_on:
+      - postgres
+
+  # -------------------------------------------------
+  # Your existing micro‑services
+  # -------------------------------------------------
   ingest-service:
     build: ./services/ingest
     container_name: ingest-service
     restart: unless-stopped
     environment:
       HUGGINGFACE_HUB_TOKEN: ${HUGGINGFACE_HUB_TOKEN}
-      DATABASE_URL: postgresql://llm:llm@postgres:5432/llm
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379/0
       MINIO_URL: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       EMBEDDING_MODEL: BAAI/bge-base-en-v1.5
-      CHUNK_SIZE: 800
-      CHUNK_OVERLAP: 120
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_EMBEDDING_MODEL: nomic-embed-text
     depends_on:
@@ -102,46 +82,115 @@ services:
       minio:
         condition: service_started
     volumes:
-      - ./data/uploads:/data/uploads       # Temp dev storage
-      - ./data/documents:/data/documents   # Permanent ingestion storage
-      - ./data/models:/data/models         # Local models
-    ports:
-      - "8001:8000"
+      - ./data/uploads:/data/uploads
+      - ./data/documents:/data/documents
+      - ./data/models:/data/models
+    ports: ["8001:8000"]
 
-  # ----------------------------
-  # Agent / RAG Service
-  # ----------------------------
   agent-service:
     build: ./services/agent
     container_name: agent-service
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://llm:llm@postgres:5432/llm
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379/0
-
-      # LLM routing
-      LLM_PROVIDER: ollama # mlx          ollama
+      LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # ---- USE STRONGER MODELS FOR REASONING ----
+      OLLAMA_MODEL: deepseek-v3.1:671b-cloud  # Primary reasoning model
+      OLLAMA_FALLBACK_MODEL: glm-4.7:cloud    # Fallback if primary fails
       OLLAMA_EMBEDDING_MODEL: nomic-embed-text
-      # RAG
-      TOP_K: 5
-      SCORE_THRESHOLD: 0.2
+      TOP_K: 8                    # Get more context for complex reasoning
+      SCORE_THRESHOLD: 0.15       # Lower threshold for broader context
+      MAX_CONTEXT_LENGTH: 100000   # Allow longer reasoning chains
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - postgres
+      - redis
     volumes:
-      - ./data/models:/data/models         # Local LLM models
-      - ./data/documents:/data/documents   # Access to stored docs
-      - ./data/data:/data/data             # Any metadata or additional structured data
-      - ./data/docs:/data/docs             # Documentation files
-    ports:
-      - "8002:8000"
+      - ./data/models:/data/models
+      - ./data/documents:/data/documents
+    ports: ["8002:8000"]
 
+  # -------------------------------------------------
+  # Ollama (LLM + embedding) – *shared* by ingest, agent & UI
+  # -------------------------------------------------
+#  ollama:
+#    image: ollama/ollama:latest
+#    container_name: ollama
+#    restart: unless-stopped
+#    tty: true
+#    volumes:
+#      - ollama:/root/.ollama
+#    ports: ["11435:11434"]
+
+  # -------------------------------------------------
+  # Open WebUI (the chat UI + RAG engine)
+  # -------------------------------------------------
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:latest
+    container_name: open-webui
+    restart: unless-stopped
+    ports: ["3000:8080"]          # http://localhost:3000
+    environment:
+      # ---- Vector DB -------------------------------------------------
+      - VECTOR_DB=pgvector                              # <‑‑ use the same pgvector DB
+      - PGVECTOR_DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # ---- RAG settings -----------------------------------------------
+      - ENABLE_RAG=true
+      - RAG_EMBEDDING_ENGINE=ollama
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - RAG_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
+      - RAG_TOP_K=5
+      - ENABLE_RAG_HYBRID_SEARCH=true
+      # ---- STRONG MODELS configuration --------------------------------
+      - DEFAULT_MODELS=deepseek-v3.1:671b-cloud,glm-4.7:cloud,qwen3-vl:235b-cloud,gpt-oss:120b-cloud,Qwen3-Coder:480b-cloud
+      - DEFAULT_PINNED_MODELS=deepseek-v3.1:671b-cloud,glm-4.7:cloud
+      - TASK_MODEL=glm-4.7:cloud  # For RAG and reasoning tasks
+      # ---- UI auth ----------------------------------------------------
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      # (optional) allow everybody to sign‑up for quick testing
+      - ENABLE_SIGNUP=true
+      # ---- Use YOUR PostgreSQL for OpenWebUI's metadata ---------
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+      # ---- Use YOUR MinIO for file storage ----------------------
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - S3_BUCKET=openwebui-files
+      - S3_REGION=us-east-1
+
+      # ---- Knowledge Base configuration -------------------------
+      - ENABLE_KNOWLEDGE_BASE=true
+      - KNOWLEDGE_STORAGE_BACKEND=s3  # Use MinIO instead of local files
+    depends_on:
+      - postgres
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - open-webui:/app/backend/data:ro         # UI data (knowledge bases, chats, etc.)
+
+
+  # -----------------------------------------------------------------
+  # NEW – tiny proxy that forwards the “GenerateResume” tool
+  # -----------------------------------------------------------------
+  tool-proxy:
+    build:
+      context: ./services/tool_proxy
+      dockerfile: Dockerfile
+    container_name: tool-proxy
+    restart: unless-stopped
+    environment:
+      - AGENT_URL=http://agent-service:8000
+    depends_on:
+      - agent-service
+    # expose only for debugging; the UI talks to it by service name
+    ports: ["8003:8000"]
 
 
 volumes:
   pgdata:
   redisdata:
+  miniodata:
   n8ndata:
+  open-webui:
