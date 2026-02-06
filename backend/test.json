@@ -1,0 +1,5 @@
+{
+  "model": "llama3",
+  "prompt": "Task Context: Task #{{$json.taskId}}: {{$json.taskData.description}} (Status: {{$json.taskData.status}}) History: {{#each $json.taskData.full_history}}- {{this.timestamp}}: {{this.type}} - {{this.content}}{{/each}} User Question: \"{{$json.userQuery}}\"  Answer based on the task context above:",
+  "stream": false
+}
