@@ -112,6 +112,40 @@ services:
       - ./data/documents:/data/documents
     ports: ["8002:8000"]
 
+  brain_service:
+    build:
+     context: ./services/brain_service
+     dockerfile: Dockerfile
+    container_name: brain_service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - OLLAMA_HOST=host.docker.internal:11434
+      - AGENT_URL=http://agent-service:8000
+    ports: ["8004:8000"]
+    extra_hosts:
+    - "host.docker.internal:host-gateway"
+    volumes:
+    - ./data/brain:/app/brain_service:rw
+
+  # -----------------------------------------------------------------
+  # NEW – tiny proxy that forwards the “GenerateResume” tool
+  # -----------------------------------------------------------------
+  tool-proxy:
+    build:
+      context: ./services/tool_proxy
+      dockerfile: Dockerfile
+    container_name: tool-proxy
+    restart: unless-stopped
+    environment:
+      - AGENT_URL=http://agent-service:8000
+    depends_on:
+      - agent-service
+    # expose only for debugging; the UI talks to it by service name
+    ports: ["8003:8000"]
+
   # -------------------------------------------------
   # Ollama (LLM + embedding) – *shared* by ingest, agent & UI
   # -------------------------------------------------
@@ -142,6 +176,7 @@ services:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - RAG_EMBEDDING_MODEL=bge-m3:latest
       - RAG_TOP_K=5
+      - OLLAMA_STREAM=false
       - ENABLE_RAG_HYBRID_SEARCH=true
       # ---- STRONG MODELS configuration --------------------------------
       - DEFAULT_MODELS=deepseek-v3.1:671b-cloud,glm-4.7:cloud,qwen3-vl:235b-cloud,gpt-oss:120b-cloud,Qwen3-Coder:480b-cloud
@@ -172,23 +207,6 @@ services:
       - "host.docker.internal:host-gateway"
     #volumes:
       # - open-webui:/app/backend/data:rw       # UI data (knowledge bases, chats, etc.)
-
-
-  # -----------------------------------------------------------------
-  # NEW – tiny proxy that forwards the “GenerateResume” tool
-  # -----------------------------------------------------------------
-  tool-proxy:
-    build:
-      context: ./services/tool_proxy
-      dockerfile: Dockerfile
-    container_name: tool-proxy
-    restart: unless-stopped
-    environment:
-      - AGENT_URL=http://agent-service:8000
-    depends_on:
-      - agent-service
-    # expose only for debugging; the UI talks to it by service name
-    ports: ["8003:8000"]
 
 
 volumes:

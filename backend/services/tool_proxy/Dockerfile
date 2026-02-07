@@ -12,7 +12,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3️⃣ Copy the source code
+
 COPY tool_proxy.py .
 
 # 4️⃣ Run as the non‑root user

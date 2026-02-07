@@ -3,13 +3,19 @@ import logging
 import os
 from datetime import datetime
 from typing import List, Dict
-from fastapi import FastAPI, HTTPException
+from urllib import request, response
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 import httpx, uuid, os
 import psycopg2
 import redis
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+import httpx
+import os
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,6 +48,36 @@ SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.2"))
 redis_client = redis.from_url(REDIS_URL)
 resume_generator = None
 
+
+# Connection manager for teleprompter
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message):
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except:
+                disconnected.append(connection)
+
+        for connection in disconnected:
+            self.active_connections.remove(connection)
+
+
+manager = ConnectionManager()
+
+
+class AudioInput(BaseModel):
+    text: str
 
 
 class QueryRequest(BaseModel):
@@ -269,6 +305,7 @@ async def get_latest_resume():
         logger.error(f"Get resume error: {e}")
         return None
 
+
 @app.post("/tool/generate_resume")
 async def generate_resume(payload: dict):
     """OpenWebUI will call this when the LLM wants a customised résumé."""
@@ -276,6 +313,7 @@ async def generate_resume(payload: dict):
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail="Agent error")
     return resp.json()
+
 
 @app.get("/health")
 async def health_check():
@@ -285,7 +323,9 @@ async def health_check():
         conn = psycopg2.connect(DATABASE_URL)
         conn.close()
         db_healthy = True
+
     except:
+
         db_healthy = False
 
     try:
@@ -312,6 +352,85 @@ async def health_check():
             "llm_provider": LLM_PROVIDER
         }
     }
+
+    # Interview analysis endpoint
+
+
+@app.post("/interview/analyze")
+async def analyze_interview_question(input_data: AudioInput):
+    """Analyze interview question and generate response"""
+    print(f"Processing question: {input_data.text}")
+    """Analyze interview question and generate response"""
+    print(f"Processing question: {input_data.text}")
+
+    """Main query endpoint - orchestrates RAG + web search + tools"""
+    start_time = datetime.now()
+
+    try:
+        # 1. Search local documents
+        local_results = await search_local_documents(request.query)
+
+        # 2. Perform web search if needed
+    web_results = []
+    if should_use_web_search(request.query, local_results):
+        web_results = await search_web(request.query)
+
+    # 3. Generate context-aware prompt
+    context = build_context(local_results, web_results)
+
+    # 4. Get AI response
+    response = await get_ai_response(request.query, context)
+
+    # Broadcast to teleprompter displays
+    await manager.broadcast(response)
+
+    return {"status": "processed", "response": response}
+
+
+# WebSocket for teleprompter
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
+# Teleprompter HTML page
+@app.get("/teleprompter")
+async def teleprompter_page():
+    html_content = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Interview Teleprompter</title>
+        <style>
+            body { font-family: Arial, sans-serif; background: #000; color: #0f0; }
+            .question { background: #222; padding: 20px; margin: 10px; border-left: 5px solid #0f0; }
+            .answer { background: #111; padding: 20px; margin: 10px; border-left: 5px solid #0ff; }
+        </style>
+    </head>
+    <body>
+        <h1>AI Interview Assistant</h1>
+        <div id="messages"></div>
+        <script>
+            const ws = new WebSocket('ws://localhost:8002/ws');
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const messages = document.getElementById('messages');
+                messages.innerHTML = `
+                    <div class="question"><strong>Q:</strong> ${data.question}</div>
+                    <div class="answer"><strong>A:</strong> ${data.answer}</div>
+                ` + messages.innerHTML;
+            };
+        </script>
+    </body>
+    </html>
+    '''
+    return HTMLResponse(content=html_content)
 
 
 if __name__ == "__main__":
