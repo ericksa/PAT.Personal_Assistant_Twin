@@ -12,6 +12,7 @@ faster-whisper>=0.10.0
 
 # Audio processing utilities
 librosa
+soundfile
 
 # Silero VAD for voice activity detection
 silero-vad

@@ -20,7 +20,18 @@ struct SettingsView: View {
                 }
                 
                 Section("Model Selection") {
-                    Picker("LLM Provider", selection: $viewModel.llmProvider) {
+                    Picker("LLM Provider", selection: Binding(
+                        get: {
+                            viewModel.currentSession?.settings.provider ?? "llama2"
+                        },
+                        set: { newValue in
+                            if var session = viewModel.currentSession {
+                                session.settings.provider = newValue
+                                viewModel.currentSession = session
+                                viewModel.saveSessionSettings()
+                            }
+                        }
+                    )) {
                         Text("Llama2").tag("llama2")
                         Text("Llama3").tag("llama3")
                         Text("Mistral").tag("mistral")

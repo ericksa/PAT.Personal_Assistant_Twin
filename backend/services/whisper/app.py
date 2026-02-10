@@ -10,20 +10,24 @@ import wave
 import struct
 import json
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 try:
     import librosa
 except ImportError:
-    logger = logging.getLogger(__name__)
     logger.warning("librosa not available, basic audio processing will be used")
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = FastAPI(title="PAT Whisper Transcription Service")
 
 # Configuration
 AGENT_SERVICE_URL = os.getenv("AGENT_SERVICE_URL", "http://agent-service:8000")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")  # base, small, medium, large
+
+# VAD Configuration
+VAD_THRESHOLD = float(os.getenv("VAD_THRESHOLD", "0.5"))
+ENERGY_THRESHOLD = int(os.getenv("ENERGY_THRESHOLD", "900"))
+MIN_BUFFER_SIZE = int(os.getenv("MIN_BUFFER_SIZE", "1600"))
 
 
 class TranscriptionRequest(BaseModel):
@@ -41,10 +45,19 @@ logger.info(f"🧠 USE_REAL_WHISPER flag: {USE_REAL_WHISPER}")
 
 # Silero VAD implementation for advanced voice activity detection
 class SileroVAD:
-    def __init__(self, sample_rate=16000):
+    def __init__(
+        self,
+        sample_rate=16000,
+        vad_threshold=0.5,
+        energy_threshold=900,
+        min_buffer_size=1600,
+    ):
         self.sample_rate = sample_rate
         self.buffer = bytearray()
         self.max_size = sample_rate * 10  # 10 seconds buffer
+        self.vad_threshold = vad_threshold  # Silero VAD threshold (0-1)
+        self.energy_threshold = energy_threshold  # Fallback energy threshold
+        self.min_buffer_size = min_buffer_size  # Minimum buffer size for VAD
         self.vad_model = None
 
     def load_model(self):
@@ -74,14 +87,15 @@ class SileroVAD:
 
     def has_speech(self) -> bool:
         """Use Silero VAD for accurate speech detection"""
-        if len(self.buffer) < 1600:  # Need at least 100ms of audio
+        import numpy as np
+
+        if len(self.buffer) < self.min_buffer_size:  # Need minimum audio buffer
             return False
 
         # Try Silero VAD first
         if self.vad_model:
             try:
                 import torch
-                import numpy as np
 
                 # Convert to numpy array
                 audio_data = np.frombuffer(self.buffer, dtype=np.int16)
@@ -93,7 +107,7 @@ class SileroVAD:
                         torch.from_numpy(audio_float), self.sample_rate
                     )
 
-                return speech_prob > 0.5
+                return speech_prob > self.vad_threshold
 
             except Exception as e:
                 logger.error(f"Silero VAD error: {e}")
@@ -102,7 +116,7 @@ class SileroVAD:
         # Fallback: energy-based detection
         audio_data = np.frombuffer(self.buffer, dtype=np.int16)
         energy = np.sqrt(np.mean(audio_data.astype(float) ** 2))
-        return energy > 900  # Lower threshold for better sensitivity
+        return energy > self.energy_threshold
 
     def get_audio_data(self) -> bytes:
         """Get audio data as bytes"""
@@ -133,6 +147,86 @@ async def real_transcribe_audio(file_path: str) -> str:
     except Exception as e:
         logger.error(f"Real transcription failed: {e}")
         return f"Real transcription failed: {str(e)}"
+
+
+def preprocess_audio(input_path: str, output_path: str):
+    """Preprocess audio for better transcription results"""
+
+    # Try librosa first for advanced preprocessing
+    try:
+        import librosa
+        import soundfile as sf
+
+        # Load audio with librosa
+        y, sr = librosa.load(input_path, sr=16000)
+
+        # Apply preprocessing
+        # Noise reduction (simple high-pass filter)
+        y_filtered = librosa.effects.preemphasis(y)
+
+        # Normalize audio
+        y_normalized = librosa.util.normalize(y_filtered)
+
+        # Save processed audio
+        sf.write(output_path, y_normalized, sr)
+        logger.info("Audio preprocessing completed with librosa")
+
+    except ImportError:
+        # Fallback to basic preprocessing with wave module
+        import wave
+        import numpy as np
+
+        try:
+            with wave.open(input_path, "rb") as wav_in:
+                params = wav_in.getparams()
+                frames = wav_in.readframes(wav_in.getnframes())
+
+            # Simple normalization
+            audio_data = np.frombuffer(frames, dtype=np.int16)
+            max_val = np.max(np.abs(audio_data))
+            if max_val > 0:
+                audio_normalized = (audio_data / max_val * 32767).astype(np.int16)
+            else:
+                audio_normalized = audio_data
+
+            # Save processed audio
+            with wave.open(output_path, "wb") as wav_out:
+                wav_out.setparams(params)
+                wav_out.writeframes(audio_normalized.tobytes())
+
+            logger.info("Audio preprocessing completed with basic normalization")
+
+        except Exception as e:
+            logger.error(f"Audio preprocessing failed: {e}")
+            # Fallback - copy file without preprocessing
+            import shutil
+
+            try:
+                shutil.copy(input_path, output_path)
+                logger.warning("Audio preprocessing failed, using original file")
+            except Exception as copy_error:
+                logger.error(f"Failed to copy audio file: {copy_error}")
+
+        # Final result
+        final_timestamp = 0.0
+        if segments:
+            segment_list = list(segments)
+            if segment_list:
+                final_timestamp = segment_list[-1].end
+
+        yield {
+            "partial": current_transcription,
+            "final": True,
+            "timestamp": final_timestamp,
+        }
+
+    except Exception as e:
+        logger.error(f"Streaming transcription failed: {e}")
+        yield {
+            "partial": f"Transcription error: {str(e)}",
+            "final": True,
+            "timestamp": 0.0,
+        }
 
 
 async def transcribe_audio_local(file_path: str) -> str:
@@ -276,7 +370,11 @@ async def websocket_endpoint(websocket: WebSocket):
     """Real-time audio streaming endpoint"""
     await websocket.accept()
     client_id = id(websocket)
-    vad_instance = SileroVAD()
+    vad_instance = SileroVAD(
+        vad_threshold=VAD_THRESHOLD,
+        energy_threshold=ENERGY_THRESHOLD,
+        min_buffer_size=MIN_BUFFER_SIZE,
+    )
     vad_instance.load_model()
 
     # Store VAD instance for this connection
@@ -294,6 +392,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if vad_instance.has_speech():
                 # Process the audio
                 temp_path = f"/tmp/audio_{client_id}.wav"
+                processed_path = f"/tmp/audio_{client_id}_processed.wav"
 
                 # Save audio to temporary file
                 with wave.open(temp_path, "wb") as wav_file:
@@ -302,11 +401,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     wav_file.setframerate(16000)
                     wav_file.writeframes(vad_instance.get_audio_data())
 
-                # Transcribe
-                transcription = await real_transcribe_audio(temp_path)
+                # Preprocess audio for better transcription
+                preprocess_audio(temp_path, processed_path)
+
+                # Perform regular transcription
+                transcription = await real_transcribe_audio(processed_path)
 
                 if transcription and len(transcription.strip()) > 0:
-                    # Send transcription back to client
+                    # Send final transcription back to client
                     await websocket.send_text(
                         json.dumps(
                             {
@@ -329,6 +431,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         )
                     )
 
+                # Cleanup temporary files
+                os.unlink(temp_path)
+                os.unlink(processed_path)
+
                 # Reset buffer after processing
                 vad_instance.reset()
 
@@ -350,6 +456,11 @@ async def detailed_health_check():
         "real_whisper_enabled": USE_REAL_WHISPER,
         "websocket_clients": len(vad_instances),
         "vad_capable": True,
+        "vad_config": {
+            "vad_threshold": VAD_THRESHOLD,
+            "energy_threshold": ENERGY_THRESHOLD,
+            "min_buffer_size": MIN_BUFFER_SIZE,
+        },
     }
 
 

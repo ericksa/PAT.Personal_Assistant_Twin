@@ -49,7 +49,15 @@ final class ChatViewModel: ObservableObject {
     @Published public var agentStatus: ServiceStatus = .disconnected
     @Published public var agentHealthDetails: HealthStatus? = nil
     @Published var currentSession: ChatSession?
-    
+
+    // ✅ NEW: Add published llmProvider, synchronized with session settings
+    @Published var llmProvider: String {
+        didSet {
+            // Keep session settings in sync
+            currentSession?.settings.provider = llmProvider
+        }
+    }
+
     // MARK: - Dependencies
     let agentService: AgentService
     let sessionService: SessionService
@@ -231,12 +239,18 @@ final class ChatViewModel: ObservableObject {
         let newSession = ChatSession(id: UUID(), title: "New Session", messages: [])
         currentSession = newSession
         messages = []
+
+        // ✅ Initialize llmProvider from session settings
+        self.llmProvider = newSession.settings.provider
     }
     
     /// Loads an existing chat session.
     public func loadSession(_ session: ChatSession) {
         currentSession = session
         messages = session.messages
+
+        // ✅ Initialize llmProvider from session settings
+        self.llmProvider = session.settings.provider
     }
     
     /// Exports the current session as markdown.
@@ -289,6 +303,10 @@ final class ChatViewModel: ObservableObject {
     /// Saves current session settings.
     public func saveSessionSettings() {
         if let session = currentSession {
+            // ✅ Keep session settings in sync with published properties
+            session.settings.useWebSearch = useWebSearch
+            session.settings.useMemoryContext = useMemoryContext
+            session.settings.provider = llmProvider
             try? sessionService.saveSession(session)
         }
     }
