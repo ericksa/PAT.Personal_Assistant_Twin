@@ -1,7 +1,7 @@
 import SwiftUI
 import Foundation
 import os.log
-internal import Combine
+import Combine
 
 enum ServiceStatus: String, Codable, CaseIterable {
     case healthy
@@ -51,12 +51,32 @@ final class ChatViewModel: ObservableObject {
     @Published var currentSession: ChatSession?
     
     // MARK: - Dependencies
-    let agentService = AgentService.shared
-    let sessionService = SessionService.shared
-    let llmService = LLMService.shared
+    let agentService: AgentService
+    let sessionService: SessionService
+    let llmService: LLMService
     
     // Add this property to ChatViewModel class
-    private let logger = SharedLogger.shared
+    private let logger: SharedLogger
+    
+    // MARK: - Initialization
+    
+    init(
+        agentService: AgentService = .shared,
+        sessionService: SessionService = .shared,
+        llmService: LLMService = .shared,
+        logger: SharedLogger = .shared
+    ) {
+        self.agentService = agentService
+        self.sessionService = sessionService
+        self.llmService = llmService
+        self.logger = logger
+        
+        // Initialize a default session
+        startNewSession()
+        Task {
+            await initialHealthCheck()
+        }
+    }
     
     // MARK: - Public methods
     
@@ -76,28 +96,36 @@ final class ChatViewModel: ObservableObject {
         guard areServicesHealthy() else {
             let errorMsg = "Cannot send message: Services are not available\n\(getFixInstructions())"
             logger.agent.error("Services not healthy: ollama=\(self.ollamaStatus.rawValue), agent=\(self.agentStatus.rawValue)")
-            errorMessage = errorMsg
+            await MainActor.run {
+                errorMessage = errorMsg
+            }
             return
         }
         
         // Clear any previous error
-        errorMessage = nil
-        inputText = ""
+        await MainActor.run {
+            errorMessage = nil
+            inputText = ""
+        }
         
-        // Add user message
+        // Add user message - FIXED initialization
         let userMessage = Message(type: .user, content: text)
-        messages.append(userMessage)
-        currentSession?.messages.append(userMessage)
-        
-        // Update session title if first message
-        if currentSession?.messages.count == 1 {
-            currentSession?.title = String(text.prefix(50))
-            logger.general.info("New session created with title: \(self.currentSession?.title ?? "Untitled")")
+        await MainActor.run {
+            messages.append(userMessage)
+            currentSession?.messages.append(userMessage)
+            
+            // Update session title if first message
+            if currentSession?.messages.count == 1 {
+                currentSession?.title = String(text.prefix(50))
+                logger.general.info("New session created with title: \(self.currentSession?.title ?? "Untitled")")
+            }
         }
         
         saveSessionSettings()
         
-        isProcessing = true
+        await MainActor.run {
+            isProcessing = true
+        }
         
         do {
             let startTime = Date()
@@ -114,6 +142,7 @@ final class ChatViewModel: ObservableObject {
             logger.agent.debug("Tools used: \(response.tools_used.joined(separator: ", "))")
             logger.agent.debug("Sources count: \(response.sources.count)")
             
+            // FIXED initialization with all required parameters
             let assistantMessage = Message(
                 type: .assistant,
                 content: response.response,
@@ -123,9 +152,11 @@ final class ChatViewModel: ObservableObject {
                 processingTime: response.processing_time
             )
             
-            messages.append(assistantMessage)
-            currentSession?.messages.append(assistantMessage)
-            currentSession?.updatedAt = Date()
+            await MainActor.run {
+                messages.append(assistantMessage)
+                currentSession?.messages.append(assistantMessage)
+                currentSession?.updatedAt = Date()
+            }
             
             // Auto-save
             if let session = currentSession {
@@ -134,10 +165,12 @@ final class ChatViewModel: ObservableObject {
             
         } catch {
             logger.logError(error, context: "Agent query failed")
-            handleSendError(error)
+            await handleSendError(error)
         }
         
-        isProcessing = false
+        await MainActor.run {
+            isProcessing = false
+        }
     }
     
     /// Checks the Ollama service health asynchronously.
@@ -164,12 +197,11 @@ final class ChatViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Public stub methods (TODO)
+    // MARK: - Service Health Methods
     
     /// Returns true if all required services are healthy.
     public func areServicesHealthy() -> Bool {
-        // TODO: Implement actual health checks
-        return ollamaStatus == .healthy && agentStatus == .healthy && ingestStatus == .healthy
+        return ollamaStatus == .healthy && agentStatus == .healthy
     }
     
     /// Performs initial health checks for all services asynchronously.
@@ -178,7 +210,8 @@ final class ChatViewModel: ObservableObject {
     }
     
     public func checkAllServices() async {
-        let (ollamaStat, ollamaHealth) = await checkOllamaService()
+        // FIXED: Using '_' for unused variable ollamaHealth
+        let (ollamaStat, _) = await checkOllamaService()
         let agentHealth: HealthStatus?
         do {
             agentHealth = try await agentService.checkHealth()
@@ -186,7 +219,7 @@ final class ChatViewModel: ObservableObject {
             agentHealth = nil
         }
         
-        DispatchQueue.main.async {
+        await MainActor.run {
             self.ollamaStatus = ollamaStat
             self.agentHealthDetails = agentHealth
             self.agentStatus = agentHealth != nil ? .healthy : .disconnected
@@ -198,9 +231,6 @@ final class ChatViewModel: ObservableObject {
         let newSession = ChatSession(id: UUID(), title: "New Session", messages: [])
         currentSession = newSession
         messages = []
-        if let currentSession = currentSession {
-            messages.append(contentsOf: currentSession.messages)
-        }
     }
     
     /// Loads an existing chat session.
@@ -270,13 +300,55 @@ final class ChatViewModel: ObservableObject {
     
     /// Returns instructions on how to fix service availability issues.
     public func getFixInstructions() -> String {
-        // TODO: Provide user-friendly fix instructions
-        return "Please check your network connection and service configuration."
+        var instructions: [String] = []
+        
+        if ollamaStatus != .healthy {
+            instructions.append("• Ensure Ollama is running on http://127.0.0.1:11434")
+            instructions.append("• Check that Ollama has models available")
+        }
+        
+        if agentStatus != .healthy {
+            instructions.append("• Ensure the agent service is running on http://127.0.0.1:8002")
+            instructions.append("• Verify the agent service is responding to health checks")
+        }
+        
+        return instructions.joined(separator: "\n")
     }
     
     /// Handles errors that occur when sending a message.
-    public func handleSendError(_ error: Error) {
-        // TODO: Implement error handling logic for sending messages
-        errorMessage = "Failed to send message: \(error.localizedDescription)"
+    public func handleSendError(_ error: Error) async {
+        let errorMessage: String
+        
+        if let agentError = error as? AgentError {
+            switch agentError {
+            case .networkError(let underlyingError):
+                errorMessage = "Network error: \(underlyingError.localizedDescription)"
+            case .serverError(let code):
+                errorMessage = "Agent server error (HTTP \(code))"
+            case .invalidURL:
+                errorMessage = "Invalid agent service URL"
+            case .invalidResponse:
+                errorMessage = "Invalid response from agent service"
+            case .decodingError:
+                errorMessage = "Failed to parse agent response"
+            }
+        } else if let llmError = error as? LLMError {
+            switch llmError {
+            case .networkError(let underlyingError):
+                errorMessage = "LLM network error: \(underlyingError.localizedDescription)"
+            case .serverError(let code):
+                errorMessage = "Ollama server error (HTTP \(code))"
+            case .invalidURL:
+                errorMessage = "Invalid Ollama URL"
+            case .decodingError(let decodingError):
+                errorMessage = "Failed to parse Ollama response: \(decodingError.localizedDescription)"
+            }
+        } else {
+            errorMessage = "Failed to send message: \(error.localizedDescription)"
+        }
+        
+        await MainActor.run {
+            self.errorMessage = errorMessage
+        }
     }
 }

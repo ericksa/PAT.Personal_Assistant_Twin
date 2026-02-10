@@ -2,14 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for audio processing
+# Install only essential dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
     libsndfile1 \
-    gcc \
-    g++ \
-    portaudio19-dev \
-    python3-dev \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
