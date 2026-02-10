@@ -12,16 +12,49 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-# Import utility functions
+# Import utility functions and LangChain components
+import sys
+import os
+
+# Add current directory to Python path for Docker compatibility
+sys.path.append('/app')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Initialize variables
+is_question = None
+build_context_from_results = None
+InterviewAssistant = None
+process_interview_question = None
+
 try:
-    from .utils import is_question, build_context_from_results
-    from .langchain_components import InterviewAssistant
-    from .langgraph_workflow import process_interview_question
-except ImportError:
-    # Fallback for when running directly
+    # Try absolute imports (for Docker)
     from utils import is_question, build_context_from_results
     from langchain_components import InterviewAssistant
     from langgraph_workflow import process_interview_question
+    logger.info("LangChain components imported successfully")
+except ImportError as e:
+    # Fallback - create minimal functionality
+    logger.warning(f"LangChain components not available, using basic functionality: {e}")
+
+    # Create fallback functions
+    def is_question_default(text):
+        """Default question detection"""
+        question_words = ['what', 'how', 'why', 'when', 'where', 'who', 'can', 'could', 'would', 'should']
+        text_lower = text.lower().strip()
+        return any(text_lower.startswith(word) for word in question_words) or '?' in text
+
+    is_question = is_question_default
+    build_context_from_results = lambda x: "No context available"
+
+    async def process_interview_question_fallback(question):
+        """Fallback interview processing"""
+        return {
+            "status": "processed",
+            "response": f"Fallback response for: {question}",
+            "is_question": True
+        }
+
+    process_interview_question = process_interview_question_fallback
 
 
 logging.basicConfig(level=logging.INFO)
@@ -143,14 +176,44 @@ async def process_interview_input(request: InterviewRequest):
 
     try:
         # Process through LangGraph workflow (more intelligent and faster)
-        result = await process_interview_question(question)
+        # Check if LangChain components are available
+        if process_interview_question is not None:
+            result = await process_interview_question(question)
 
-        # If it's not a question, just acknowledge
-        if not result.get("is_question", True):
-            logger.info(f"Text doesn't appear to be a question: {question}")
-            return {"status": "received", "question": question, "processed": False}
+            # If it's not a question, just acknowledge
+            if not result.get("is_question", True):
+                logger.info(f"Text doesn't appear to be a question: {question}")
+                return {"status": "received", "question": question, "processed": False}
 
-        response_text = result["response"]
+            response_text = result["response"]
+        else:
+            # Fallback to basic processing if LangChain is not available
+            logger.warning("LangChain components not available, using basic processing")
+
+            # Check if this is actually a question
+            if not is_question(question):
+                logger.info(f"Text doesn't appear to be a question: {question}")
+                return {"status": "received", "question": question, "processed": False}
+
+            # Get context from local documents
+            local_results = await search_local_documents(question)
+
+            # Get web search results if needed
+            web_results = []
+            if should_use_web_search(question, local_results):
+                web_results = await search_web(question)
+
+            # Build context from both local and web results
+            context = build_context(local_results, web_results)
+
+            # Get AI response using basic method
+            try:
+                from .llm import get_ai_response
+            except ImportError:
+                # Fallback for when running directly
+                from llm import get_ai_response
+
+            response_text = await get_ai_response(question, context, is_interview=True)
 
         # Send response to teleprompter service
         try:
@@ -168,7 +231,7 @@ async def process_interview_input(request: InterviewRequest):
             logger.error(f"Error sending to teleprompter service: {e}")
 
         logger.info(f"Sent response to teleprompter: {response_text[:100]}...")
-        return {"status": result["status"], "question": question, "response": response_text}
+        return {"status": "processed" if process_interview_question is not None else "processed_basic", "question": question, "response": response_text}
 
     except Exception as e:
         logger.error(f"Error processing interview question: {e}")

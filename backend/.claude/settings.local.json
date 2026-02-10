@@ -17,7 +17,12 @@
       "Bash(docker-compose up:*)",
       "Bash(docker-compose build:*)",
       "Bash(chmod:*)",
-      "Bash(swift build:*)"
+      "Bash(swift build:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose exec agent-service cat:*)",
+      "Bash(docker-compose exec agent-service python -c \"import langchain; print\\('LangChain version:', langchain.__version__\\)\":*)",
+      "Bash(docker-compose exec agent-service python:*)",
+      "Bash(docker-compose exec agent-service ls:*)"
     ]
   }
 }

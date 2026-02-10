@@ -11,4 +11,6 @@ Jinja2>=3.1.2  # Add this for resume templates
 
 # LangChain dependencies for enhanced AI capabilities
 langchain>=0.3.27
+langchain-community>=0.3.27
+langchain-ollama>=0.2.0
 langgraph>=1.0.1
