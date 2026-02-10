@@ -372,7 +372,15 @@ async def upload_document(file: UploadFile = File(...)):
 async def search_documents(request: SearchRequest):
     """Search documents using embeddings"""
     try:
-        # ... (code before this point is fine) ...
+        # Generate embedding for the query
+        query_embedding = None
+        if embedding_model and request.query.strip():
+            try:
+                embeddings = await embedding_model.embed([request.query])
+                query_embedding = embeddings[0] if embeddings else None
+                logger.info(f"Generated query embedding with {len(query_embedding) if query_embedding else 0} dimensions")
+            except Exception as e:
+                logger.warning(f"Failed to generate query embedding: {e}")
 
         # Connect to database
         conn = psycopg2.connect(DATABASE_URL)

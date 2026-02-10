@@ -14,10 +14,10 @@ from pydantic import BaseModel
 
 # Import utility functions
 try:
-    from .utils import is_question, build_context
+    from .utils import is_question, build_context_from_results
 except ImportError:
     # Fallback for when running directly
-    from utils import is_question, build_context
+    from utils import is_question, build_context_from_results
 
 
 logging.basicConfig(level=logging.INFO)
@@ -146,7 +146,14 @@ async def process_interview_input(request: InterviewRequest):
     try:
         # Get context from local documents
         local_results = await search_local_documents(question)
-        context = build_context(local_results)
+
+        # Get web search results if needed
+        web_results = []
+        if should_use_web_search(question, local_results):
+            web_results = await search_web(question)
+
+        # Build context from both local and web results
+        context = build_context(local_results, web_results)
 
         # Get AI response
         try:
@@ -157,12 +164,20 @@ async def process_interview_input(request: InterviewRequest):
 
         response_text = await get_ai_response(question, context, is_interview=True)
 
-        # Send response to all connected teleprompters
-        await interview_manager.broadcast({
-            "type": "text",
-            "content": response_text,
-            "question": question
-        })
+        # Send response to teleprompter service
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://teleprompter-app:8000/broadcast",
+                    json={"message": response_text},
+                    timeout=30
+                )
+                if response.status_code == 200:
+                    logger.info(f"Successfully sent response to teleprompter service")
+                else:
+                    logger.error(f"Teleprompter service returned {response.status_code}: {response.text}")
+        except Exception as e:
+            logger.error(f"Error sending to teleprompter service: {e}")
 
         logger.info(f"Sent response to teleprompter: {response_text[:100]}...")
         return {"status": "processed", "question": question, "response": response_text}

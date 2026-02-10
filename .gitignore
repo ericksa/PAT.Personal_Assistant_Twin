@@ -20,3 +20,5 @@ DerivedData/
 *.swp
 *.tmp
 /.idea
+/backend/.claude
+/backend
