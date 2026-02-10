@@ -44,7 +44,7 @@ def initialize_langchain_components():
 
     # Test each component individually with detailed logging
     try:
-        from .utils import is_question as utils_is_question
+        from utils import is_question as utils_is_question
 
         is_question = utils_is_question
         component_status["utils"] = "✓ OK"
@@ -54,7 +54,7 @@ def initialize_langchain_components():
         logger.error(f"Failed to import utils: {e}")
 
     try:
-        from .interview_assistant import InterviewAssistant as LC_InterviewAssistant
+        from interview_assistant import InterviewAssistant as LC_InterviewAssistant
 
         InterviewAssistant = LC_InterviewAssistant
         component_status["interview_assistant"] = "✓ OK"
@@ -64,7 +64,7 @@ def initialize_langchain_components():
         logger.error(f"Failed to import InterviewAssistant: {e}")
 
     try:
-        from .langgraph_workflow import (
+        from langgraph_workflow import (
             process_interview_question as lg_process_interview_question,
         )
 
