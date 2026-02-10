@@ -9,5 +9,5 @@ torch
 numpy
 librosa
 
-# Alternative: Use faster-whisper for better performance
-# faster-whisper
+# Real Whisper integration
+faster-whisper>=0.10.0

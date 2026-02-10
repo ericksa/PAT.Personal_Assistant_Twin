@@ -6,6 +6,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
+    gcc \
+    g++ \
+    portaudio19-dev \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
