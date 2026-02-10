@@ -43,12 +43,13 @@ struct ChatView: View {
                     serviceStatusBanner
                 }
 
-                headerView
                 messagesView
-
+                
                 if let errorMessage = viewModel.errorMessage {
                     errorBanner(message: errorMessage)
                 }
+                
+                Divider()
 
                 inputView
             }
@@ -63,7 +64,7 @@ struct ChatView: View {
             }
             .task {
                 await viewModel.initialHealthCheck()
-                loadSessions()
+                await loadSessionsAsync()
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView(viewModel: viewModel)
@@ -132,47 +133,15 @@ struct ChatView: View {
     }
     
     @ViewBuilder
-    private var headerView: some View {
-        HStack {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(viewModel.areServicesHealthy() ? .green : .red)
-                    .frame(width: 8, height: 8)
-                Text(viewModel.agentHealthDetails?.services.llm_provider ?? "Unknown")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 12) {
-                Button(action: { viewModel.exportAsMarkdown() }) {
-                    Label("Markdown", systemImage: "doc.text")
-                }
-                .buttonStyle(.borderless)
-                
-                Button(action: { Task { await viewModel.uploadDocument() } }) {
-                    Label("Upload", systemImage: "square.and.arrow.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(viewModel.isProcessing || viewModel.ingestStatus != .healthy)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
-    }
-    
-    @ViewBuilder
     private var messagesView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 16) {
                     if viewModel.messages.isEmpty {
                         emptyStateView
                     } else {
                         ForEach(viewModel.messages) { message in
-                            MessageRow(message: message)
+                            MessageRow(message: message, viewModel: viewModel)
                             
                             if message.id != viewModel.messages.last?.id {
                                 Divider()
@@ -191,6 +160,7 @@ struct ChatView: View {
                         }
                     }
                 }
+                .padding(.vertical, 16)
                 .onChange(of: viewModel.messages.count) { _, _ in
                     if let lastMessage = viewModel.messages.last {
                         withAnimation {
@@ -207,7 +177,6 @@ struct ChatView: View {
                 }
             }
         }
-        .padding(.vertical, 8)
     }
     
     @ViewBuilder
@@ -260,7 +229,7 @@ struct ChatView: View {
                             
                             stepInstruction(
                                 "Download a model",
-                                command: "ollama pull llama2"
+                                command: "ollama pull llama3:8b"
                             )
                             
                             stepInstruction(
@@ -355,6 +324,15 @@ struct ChatView: View {
             Divider()
             
             HStack(spacing: 12) {
+                Button(action: {
+                    // TODO: Implement file attachment
+                }) {
+                    Image(systemName: "paperclip")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.borderless)
+                
                 TextField("Type your message...", text: $viewModel.inputText, axis: .vertical)
                     .focused($isInputFocused)
                     .font(.body)
@@ -363,18 +341,21 @@ struct ChatView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 16)
                             .fill(Color(nsColor: .textBackgroundColor))
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
                 
                 Button(action: {
                     Task {
                         await viewModel.sendMessage()
                     }
                 }) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 32))
+                    Image(systemName: "paperplane.fill")
+                        .font(.title3)
                         .foregroundColor(
                             viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.areServicesHealthy()
                             ? .secondary
@@ -389,7 +370,7 @@ struct ChatView: View {
                 )
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 16)
+            .padding(.vertical, 12)
         }
         .background(Color(nsColor: .controlBackgroundColor))
     }
@@ -400,6 +381,17 @@ struct ChatView: View {
         } catch {
             print("Failed to load sessions: \(error)")
             viewModel.errorMessage = "Failed to load saved sessions"
+        }
+    }
+    
+    private func loadSessionsAsync() async {
+        DispatchQueue.main.async {
+            do {
+                self.sessions = try SessionService.shared.loadAllSessions()
+            } catch {
+                print("Failed to load sessions: \(error)")
+                self.viewModel.errorMessage = "Failed to load saved sessions"
+            }
         }
     }
 }

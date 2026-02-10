@@ -1,15 +1,9 @@
-//
-//  SettingsView.swift
-//  PATclient
-//
-//  Created by Adam Erickson on 1/22/26.
-//
-
 import SwiftUI
 
 struct SettingsView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: ChatViewModel
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
         NavigationStack {
@@ -20,39 +14,67 @@ struct SettingsView: View {
                 }
                 
                 Section("Model Selection") {
-                    Picker("LLM Provider", selection: Binding(
-                        get: {
-                            viewModel.currentSession?.settings.provider ?? "llama2"
-                        },
+                    Picker("LLM Provider", selection: $viewModel.llmProvider) {
+                        Text("Llama 2").tag("llama2")
+                        Text("Llama 3").tag("llama3")
+                        Text("Mistral").tag("mistral")
+                        Text("Ollama").tag("ollama") // Fixed: Added missing tag
+                    }
+                    .pickerStyle(.menu)
+                    
+                    Button("Check Available Models") {
+                        Task {
+                            await viewModel.checkAllServices()
+                        }
+                    }
+                }
+                
+                Section("Appearance") {
+                    Toggle("Dark Mode", isOn: Binding(
+                        get: { viewModel.useDarkMode },
                         set: { newValue in
+                            viewModel.useDarkMode = newValue
                             if var session = viewModel.currentSession {
-                                session.settings.provider = newValue
+                                session.settings.useDarkMode = newValue
                                 viewModel.currentSession = session
                                 viewModel.saveSessionSettings()
                             }
                         }
-                    )) {
-                        Text("Llama2").tag("llama2")
-                        Text("Llama3").tag("llama3")
-                        Text("Mistral").tag("mistral")
-                    }
-                    .pickerStyle(.menu)
+                    ))
                 }
                 
-                Section("Appearance") {
-                    Toggle("Dark Mode", isOn: $viewModel.useDarkMode)
+                Section("Documents") {
+                    Button("Upload Document") {
+                        Task {
+                            await viewModel.uploadDocument()
+                        }
+                    }
+                    
+                    Button("Manage Documents") {
+                        // TODO: Implement document management
+                    }
                 }
                 
                 Section("Export & Import") {
                     Button("Export as Markdown") {
                         viewModel.exportAsMarkdown()
                     }
+                    
                     Button("Import Session") {
-                        // TODO: Implement import from .md or .json
+                        importSession()
+                    }
+                    
+                    Button("Delete Current Session") {
+                        deleteCurrentSession()
                     }
                 }
                 
                 Section("Services") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        statusRow("Ollama Service", viewModel.ollamaStatus)
+                        statusRow("Agent Service", viewModel.agentStatus)
+                    }
+                    
                     Button("Check Health Again") {
                         Task {
                             await viewModel.checkAllServices()
@@ -64,10 +86,40 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }
                 }
             }
+        }
+    }
+    
+    @ViewBuilder
+    private func statusRow(_ title: String, _ status: ServiceStatus) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Circle()
+                .fill(status.color)
+                .frame(width: 8, height: 8)
+            Text(status.displayText)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    private func importSession() {
+        // Implement file picker for JSON import
+        print("Import session functionality not yet implemented")
+    }
+    
+    private func deleteCurrentSession() {
+        guard let session = viewModel.currentSession else { return }
+        
+        do {
+            try SessionService.shared.deleteSession(id: session.id)
+            viewModel.startNewSession()
+        } catch {
+            print("Failed to delete session: \(error)")
         }
     }
 }

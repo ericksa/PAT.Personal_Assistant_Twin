@@ -40,9 +40,22 @@
 		E0BF82062F3B8FA200562713 /* PATclient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PATclient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E0BF82332F3BA27200562713 /* Exceptions for "PATclient" folder in "PATclient" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E00144FB2F22A4080053AAD4 /* PATclient */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E00145672F22B4BF0053AAD4 /* PATclient */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E0BF82332F3BA27200562713 /* Exceptions for "PATclient" folder in "PATclient" target */,
+			);
 			path = PATclient;
 			sourceTree = "<group>";
 		};
