@@ -50,22 +50,31 @@ async def transcribe_audio_local(file_path: str) -> str:
 async def send_to_agent_service(question: str) -> str:
     """Send transcribed question to agent service for RAG response"""
     try:
+        logger.info(f"Sending request to agent service: {AGENT_SERVICE_URL}/query")
+        logger.info(f"Request payload: {{'query': '{question}', 'user_id': 'default'}}")
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{AGENT_SERVICE_URL}/query",
                 json={"query": question, "user_id": "default"},
-                timeout=30
+                timeout=120  # Increase timeout to 120 seconds for LLM processing
             )
-            
+
+            logger.info(f"Agent service response status: {response.status_code}")
+            logger.info(f"Agent service response text: {response.text}")
+
             if response.status_code == 200:
                 result = response.json()
-                return result.get("answer", "No response from agent service")
+                logger.info(f"Agent service response JSON: {result}")
+                answer = result.get("response", "No response from agent service")
+                logger.info(f"Extracted answer: {answer}")
+                return answer
             else:
                 logger.error(f"Agent service error: {response.status_code}")
                 return f"Agent service unavailable: {response.status_code}"
-                
+
     except Exception as e:
-        logger.error(f"Agent service communication error: {e}")
+        logger.error(f"Agent service communication error: {e}", exc_info=True)
         return f"Failed to communicate with agent service: {str(e)}"
 
 @app.post("/transcribe")
