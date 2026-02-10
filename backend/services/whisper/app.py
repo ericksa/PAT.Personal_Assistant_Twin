@@ -6,10 +6,15 @@ import os
 import asyncio
 import httpx
 import numpy as np
-import librosa
 import wave
 import struct
 import json
+
+try:
+    import librosa
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.warning("librosa not available, basic audio processing will be used")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,11 +39,27 @@ USE_REAL_WHISPER = True  # Enable for testing - will control via Dockerfile late
 logger.info(f"🧠 USE_REAL_WHISPER flag: {USE_REAL_WHISPER}")
 
 
-# Audio buffer for real-time processing
-class AudioBuffer:
-    def __init__(self, max_size=16000 * 10):  # 10 seconds buffer
+# Silero VAD implementation for advanced voice activity detection
+class SileroVAD:
+    def __init__(self, sample_rate=16000):
+        self.sample_rate = sample_rate
         self.buffer = bytearray()
-        self.max_size = max_size
+        self.max_size = sample_rate * 10  # 10 seconds buffer
+        self.vad_model = None
+
+    def load_model(self):
+        """Load Silero VAD model"""
+        try:
+            import torch
+            from silero_vad import load_silero_vad
+
+            if self.vad_model is None:
+                logger.info("Loading Silero VAD model...")
+                self.vad_model = load_silero_vad()
+                logger.info("Silero VAD model loaded successfully")
+        except ImportError:
+            logger.warning("Silero VAD not available, falling back to energy-based VAD")
+            self.vad_model = None
 
     def add_chunk(self, chunk: bytes):
         """Add audio chunk to buffer"""
@@ -52,26 +73,44 @@ class AudioBuffer:
         self.buffer.clear()
 
     def has_speech(self) -> bool:
-        """Simple energy-based voice detection"""
+        """Use Silero VAD for accurate speech detection"""
         if len(self.buffer) < 1600:  # Need at least 100ms of audio
             return False
 
-        # Convert to numpy array
+        # Try Silero VAD first
+        if self.vad_model:
+            try:
+                import torch
+                import numpy as np
+
+                # Convert to numpy array
+                audio_data = np.frombuffer(self.buffer, dtype=np.int16)
+                audio_float = audio_data.astype(np.float32) / 32768.0
+
+                # Use Silero VAD
+                with torch.no_grad():
+                    speech_prob = self.vad_model(
+                        torch.from_numpy(audio_float), self.sample_rate
+                    )
+
+                return speech_prob > 0.5
+
+            except Exception as e:
+                logger.error(f"Silero VAD error: {e}")
+                # Fallback to energy-based detection
+
+        # Fallback: energy-based detection
         audio_data = np.frombuffer(self.buffer, dtype=np.int16)
-
-        # Simple energy-based detection
         energy = np.sqrt(np.mean(audio_data.astype(float) ** 2))
-        threshold = 1000  # Arbitrary threshold
-
-        return energy > threshold
+        return energy > 900  # Lower threshold for better sensitivity
 
     def get_audio_data(self) -> bytes:
         """Get audio data as bytes"""
         return bytes(self.buffer)
 
 
-# Global audio buffer for WebSocket connections
-audio_buffers = {}
+# Global Silero VAD instances for WebSocket connections
+vad_instances = {}
 
 
 async def real_transcribe_audio(file_path: str) -> str:
@@ -237,10 +276,11 @@ async def websocket_endpoint(websocket: WebSocket):
     """Real-time audio streaming endpoint"""
     await websocket.accept()
     client_id = id(websocket)
-    audio_buffer = AudioBuffer()
+    vad_instance = SileroVAD()
+    vad_instance.load_model()
 
-    # Store buffer for this connection
-    audio_buffers[client_id] = audio_buffer
+    # Store VAD instance for this connection
+    vad_instances[client_id] = vad_instance
 
     logger.info(f"WebSocket client connected: {client_id}")
 
@@ -248,10 +288,10 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             # Receive audio chunks
             data = await websocket.receive_bytes()
-            audio_buffer.add_chunk(data)
+            vad_instance.add_chunk(data)
 
-            # Check for speech activity
-            if audio_buffer.has_speech():
+            # Check for speech activity using enhanced VAD
+            if vad_instance.has_speech():
                 # Process the audio
                 temp_path = f"/tmp/audio_{client_id}.wav"
 
@@ -260,7 +300,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     wav_file.setnchannels(1)  # mono
                     wav_file.setsampwidth(2)  # 16-bit
                     wav_file.setframerate(16000)
-                    wav_file.writeframes(audio_buffer.get_audio_data())
+                    wav_file.writeframes(vad_instance.get_audio_data())
 
                 # Transcribe
                 transcription = await real_transcribe_audio(temp_path)
@@ -290,14 +330,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
 
                 # Reset buffer after processing
-                audio_buffer.reset()
+                vad_instance.reset()
 
     except Exception as e:
         logger.error(f"WebSocket error for client {client_id}: {e}")
     finally:
         # Cleanup
-        if client_id in audio_buffers:
-            del audio_buffers[client_id]
+        if client_id in vad_instances:
+            del vad_instances[client_id]
         logger.info(f"WebSocket client disconnected: {client_id}")
 
 
@@ -308,7 +348,7 @@ async def detailed_health_check():
         "status": "healthy",
         "service": "whisper-transcription",
         "real_whisper_enabled": USE_REAL_WHISPER,
-        "websocket_clients": len(audio_buffers),
+        "websocket_clients": len(vad_instances),
         "vad_capable": True,
     }
 

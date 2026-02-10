@@ -13,9 +13,11 @@ struct ChatView: View {
     @State private var showingSettings = false
     @State private var sessions: [ChatSession] = []
     @FocusState private var isInputFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
     
+    private var isDarkMode: Bool { colorScheme == .dark }
     
-    var body: some View {           // ← Add this
+    var body: some View {
         NavigationSplitView {
             SessionListView(
                 sessions: $sessions,
@@ -50,6 +52,7 @@ struct ChatView: View {
 
                 inputView
             }
+            .background(Color(nsColor: isDarkMode ? .black : .white))
             .navigationTitle(viewModel.currentSession?.title ?? "PAT")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -58,12 +61,17 @@ struct ChatView: View {
                     }
                 }
             }
-        }
-        .task {
-            await viewModel.initialHealthCheck()
-            loadSessions()
+            .task {
+                await viewModel.initialHealthCheck()
+                loadSessions()
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView(viewModel: viewModel)
+                    .presentationDetents([.medium])
+            }
         }
     }
+    
     @ViewBuilder
     private var serviceStatusBanner: some View {
         VStack(spacing: 0) {
@@ -86,8 +94,6 @@ struct ChatView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Services Required")
                         .font(.headline)
-                    
-          
                     
                     if let agentDetails = viewModel.agentHealthDetails {
                         Divider()
@@ -125,8 +131,6 @@ struct ChatView: View {
         }
     }
     
-   
-    
     @ViewBuilder
     private var headerView: some View {
         HStack {
@@ -163,7 +167,7 @@ struct ChatView: View {
     private var messagesView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 0) {
+                LazyVStack(spacing: 12) {
                     if viewModel.messages.isEmpty {
                         emptyStateView
                     } else {
@@ -203,6 +207,7 @@ struct ChatView: View {
                 }
             }
         }
+        .padding(.vertical, 8)
     }
     
     @ViewBuilder
@@ -327,9 +332,11 @@ struct ChatView: View {
             HStack(spacing: 20) {
                 Toggle("Web Search", isOn: $viewModel.useWebSearch)
                     .toggleStyle(.switch)
+                    .font(.caption)
                 
                 Toggle("Memory Context", isOn: $viewModel.useMemoryContext)
                     .toggleStyle(.switch)
+                    .font(.caption)
                 
                 Spacer()
                 
@@ -359,6 +366,7 @@ struct ChatView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color(nsColor: .textBackgroundColor))
                     )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 
                 Button(action: {
                     Task {
@@ -400,3 +408,4 @@ struct ChatView: View {
     ChatView()
         .frame(width: 800, height: 600)
 }
+

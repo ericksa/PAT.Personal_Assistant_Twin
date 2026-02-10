@@ -9,3 +9,9 @@ numpy
 
 # Real Whisper integration
 faster-whisper>=0.10.0
+
+# Audio processing utilities
+librosa
+
+# Silero VAD for voice activity detection
+silero-vad
