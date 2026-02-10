@@ -8,7 +8,9 @@
       "Bash(docker exec:*)",
       "Bash(docker compose restart:*)",
       "Bash(docker compose build:*)",
-      "Bash(docker compose up:*)"
+      "Bash(docker compose up:*)",
+      "Bash(pip install:*)",
+      "Bash(python3:*)"
     ]
   }
 }

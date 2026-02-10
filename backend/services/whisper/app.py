@@ -52,8 +52,8 @@ async def send_to_agent_service(question: str) -> str:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{AGENT_SERVICE_URL}/interview/analyze",
-                json={"text": question},
+                f"{AGENT_SERVICE_URL}/query",
+                json={"query": question, "user_id": "default"},
                 timeout=30
             )
             
