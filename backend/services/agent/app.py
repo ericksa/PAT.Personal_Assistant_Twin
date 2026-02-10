@@ -7,9 +7,17 @@ from typing import List, Dict
 import httpx
 import psycopg2
 import redis
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+# Import utility functions
+try:
+    from .utils import is_question, build_context
+except ImportError:
+    # Fallback for when running directly
+    from utils import is_question, build_context
 
 
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +28,32 @@ app = FastAPI(
     description="AI agent with RAG, web search, and tool orchestration",
     version="1.0.0"
 )
+
+# WebSocket Connection Manager for live interview updates
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"WebSocket send error: {e}")
+                disconnected.append(connection)
+
+        for connection in disconnected:
+            self.disconnect(connection)
+
+interview_manager = ConnectionManager()
 
 # CORS configuration
 app.add_middleware(
@@ -65,6 +99,83 @@ class WebSearchResult(BaseModel):
     content: str
     url: str
     source: str
+
+
+# Model for live interview input
+class InterviewRequest(BaseModel):
+    text: str
+    source: str = "interviewer"
+
+
+# Simple test endpoint
+@app.get("/test-interview")
+async def test_interview():
+    return {"message": "Interview endpoint working"}
+
+# WebSocket endpoint for teleprompter
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time teleprompter updates"""
+    await interview_manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Handle ping messages
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        interview_manager.disconnect(websocket)
+        logger.info("WebSocket client disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        interview_manager.disconnect(websocket)
+
+# Endpoint to process live interview input
+@app.post("/interview/process")
+async def process_interview_input(request: InterviewRequest):
+    """Process live interview input and send response to teleprompter"""
+    question = request.text
+    logger.info(f"Processing interview question: {question}")
+
+    # Check if this is actually a question
+    if not is_question(question):
+        logger.info(f"Text doesn't appear to be a question: {question}")
+        # Still acknowledge receipt but don't process as a question
+        return {"status": "received", "question": question, "processed": False}
+
+    try:
+        # Get context from local documents
+        local_results = await search_local_documents(question)
+        context = build_context(local_results)
+
+        # Get AI response
+        try:
+            from .llm import get_ai_response
+        except ImportError:
+            # Fallback for when running directly
+            from llm import get_ai_response
+
+        response_text = await get_ai_response(question, context, is_interview=True)
+
+        # Send response to all connected teleprompters
+        await interview_manager.broadcast({
+            "type": "text",
+            "content": response_text,
+            "question": question
+        })
+
+        logger.info(f"Sent response to teleprompter: {response_text[:100]}...")
+        return {"status": "processed", "question": question, "response": response_text}
+
+    except Exception as e:
+        logger.error(f"Error processing interview question: {e}")
+        error_message = f"Error processing question: {str(e)}"
+        await interview_manager.broadcast({
+            "type": "text",
+            "content": error_message,
+            "question": question
+        })
+        return {"status": "error", "question": question, "error": str(e)}
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -312,6 +423,26 @@ async def health_check():
             "llm_provider": LLM_PROVIDER
         }
     }
+
+
+@app.get("/interview/display", response_class=HTMLResponse)
+async def interview_display():
+    """Serve the interview teleprompter display"""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Interview Teleprompter</title>
+    </head>
+    <body>
+        <h1>Interview Teleprompter</h1>
+        <div id="content">Waiting for content...</div>
+        <script>
+            console.log("Connected to interview WebSocket");
+        </script>
+    </body>
+    </html>
+    """
 
 
 if __name__ == "__main__":
