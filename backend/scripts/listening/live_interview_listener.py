@@ -35,7 +35,7 @@ live_interview_listener.py
 
       # Audio settings
       SAMPLE_RATE = 16000
-      RECORD_DURATION = 5  # seconds
+      RECORD_DURATION = 3  # seconds
       AUDIO_THRESHOLD = 0.02  # Silence threshold (0-1)
 
       # Processing settings
@@ -221,7 +221,7 @@ live_interview_listener.py
                   response = requests.post(
                       self.config.AGENT_SERVICE_URL,
                       json=payload,
-                      timeout=30,
+                      timeout=15,  # Reduced timeout for faster feedback
                       headers={'Content-Type': 'application/json'}
                   )
 

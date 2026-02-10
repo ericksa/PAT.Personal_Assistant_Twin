@@ -41,16 +41,17 @@ Answer:"""
                 response = await client.post(
                     f"{OLLAMA_BASE_URL}/api/generate",
                     json={
-                        "model": "deepseek-v3.1:671b-cloud",
+                        "model": "llama3:8b",  # Will use Metal acceleration on M1
                         "prompt": prompt,
                         "stream": False,
                         "options": {
                             "temperature": 0.7 if is_interview else 0.8,
                             "top_p": 0.9,
-                            "top_k": 40
+                            "top_k": 40,
+                            "num_ctx": 2048
                         }
                     },
-                    timeout=120
+                    timeout=30  # Reduced timeout for faster failure detection
                 )
 
                 if response.status_code == 200:

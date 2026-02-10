@@ -15,9 +15,13 @@ from pydantic import BaseModel
 # Import utility functions
 try:
     from .utils import is_question, build_context_from_results
+    from .langchain_components import InterviewAssistant
+    from .langgraph_workflow import process_interview_question
 except ImportError:
     # Fallback for when running directly
     from utils import is_question, build_context_from_results
+    from langchain_components import InterviewAssistant
+    from langgraph_workflow import process_interview_question
 
 
 logging.basicConfig(level=logging.INFO)
@@ -133,36 +137,20 @@ async def websocket_endpoint(websocket: WebSocket):
 # Endpoint to process live interview input
 @app.post("/interview/process")
 async def process_interview_input(request: InterviewRequest):
-    """Process live interview input and send response to teleprompter"""
+    """Process live interview input and send response to teleprompter using LangGraph workflow"""
     question = request.text
     logger.info(f"Processing interview question: {question}")
 
-    # Check if this is actually a question
-    if not is_question(question):
-        logger.info(f"Text doesn't appear to be a question: {question}")
-        # Still acknowledge receipt but don't process as a question
-        return {"status": "received", "question": question, "processed": False}
-
     try:
-        # Get context from local documents
-        local_results = await search_local_documents(question)
+        # Process through LangGraph workflow (more intelligent and faster)
+        result = await process_interview_question(question)
 
-        # Get web search results if needed
-        web_results = []
-        if should_use_web_search(question, local_results):
-            web_results = await search_web(question)
+        # If it's not a question, just acknowledge
+        if not result.get("is_question", True):
+            logger.info(f"Text doesn't appear to be a question: {question}")
+            return {"status": "received", "question": question, "processed": False}
 
-        # Build context from both local and web results
-        context = build_context(local_results, web_results)
-
-        # Get AI response
-        try:
-            from .llm import get_ai_response
-        except ImportError:
-            # Fallback for when running directly
-            from llm import get_ai_response
-
-        response_text = await get_ai_response(question, context, is_interview=True)
+        response_text = result["response"]
 
         # Send response to teleprompter service
         try:
@@ -170,7 +158,7 @@ async def process_interview_input(request: InterviewRequest):
                 response = await client.post(
                     "http://teleprompter-app:8000/broadcast",
                     json={"message": response_text},
-                    timeout=30
+                    timeout=10  # Even faster timeout for LangGraph
                 )
                 if response.status_code == 200:
                     logger.info(f"Successfully sent response to teleprompter service")
@@ -180,16 +168,23 @@ async def process_interview_input(request: InterviewRequest):
             logger.error(f"Error sending to teleprompter service: {e}")
 
         logger.info(f"Sent response to teleprompter: {response_text[:100]}...")
-        return {"status": "processed", "question": question, "response": response_text}
+        return {"status": result["status"], "question": question, "response": response_text}
 
     except Exception as e:
         logger.error(f"Error processing interview question: {e}")
         error_message = f"Error processing question: {str(e)}"
-        await interview_manager.broadcast({
-            "type": "text",
-            "content": error_message,
-            "question": question
-        })
+
+        # Send error to teleprompter service
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "http://teleprompter-app:8000/broadcast",
+                    json={"message": error_message},
+                    timeout=10
+                )
+        except Exception as broadcast_error:
+            logger.error(f"Error sending error to teleprompter service: {broadcast_error}")
+
         return {"status": "error", "question": question, "error": str(e)}
 
 
@@ -328,7 +323,7 @@ Answer:"""
                 response = await client.post(
                     f"{OLLAMA_BASE_URL}/api/generate",
                     json={
-                        "model": "deepseek-v3.1:671b-cloud",
+                        "model": "llama3:8b",
                         "prompt": prompt,
                         "stream": False
                     },

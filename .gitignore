@@ -22,3 +22,5 @@ DerivedData/
 /.idea
 /backend/.claude
 /backend
+/SwiftOverlay/.build
+/backend/.claude
