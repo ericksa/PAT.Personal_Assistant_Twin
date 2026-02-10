@@ -2,14 +2,6 @@
 //  SessionListView.swift
 //  PATclient
 //
-//  Created by Adam Erickson on 1/22/26.
-//
-
-
-//
-//  SessionListView.swift
-//  PATclient
-//
 //  Sidebar view for managing chat sessions
 //
 
@@ -21,6 +13,9 @@ struct SessionListView: View {
     var onCreateNew: () -> Void
     var onSelectSession: (ChatSession) -> Void
     var onDeleteSession: (ChatSession) -> Void
+    
+    // Move dialog state to parent to avoid focus issues
+    @State private var sessionToDelete: ChatSession? = nil
     
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +32,25 @@ struct SessionListView: View {
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
+        // Alert bound to parent view to prevent focus loss
+        .alert(
+            "Delete Chat?",
+            isPresented: Binding(
+                get: { sessionToDelete != nil },
+                set: { if !$0 { sessionToDelete = nil } }
+            ),
+            presenting: sessionToDelete
+        ) { session in
+            Button("Cancel", role: .cancel) {
+                sessionToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                onDeleteSession(session)
+                sessionToDelete = nil
+            }
+        } message: { session in
+            Text("Are you sure you want to delete \"\(session.title)\"? This cannot be undone.")
+        }
     }
     
     @ViewBuilder
@@ -80,7 +94,7 @@ struct SessionListView: View {
                     session: session,
                     isSelected: selectedSession.id == session.id,
                     onTap: { onSelectSession(session) },
-                    onDelete: { onDeleteSession(session) }
+                    onDelete: { sessionToDelete = session }  // Set here, present in parent
                 )
                 .tag(session)
             }
@@ -100,7 +114,6 @@ struct SessionRowView: View {
     let onDelete: () -> Void
     
     @State private var isHovered = false
-    @State private var showingDeleteConfirmation = false
     
     var body: some View {
         HStack(spacing: 8) {
@@ -118,23 +131,13 @@ struct SessionRowView: View {
             Spacer()
             
             if isHovered {
-                Button(action: { showingDeleteConfirmation = true }) {
+                Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.borderless)
                 .help("Delete chat")
-                .confirmationDialog(
-                    "Delete this chat?",
-                    isPresented: $showingDeleteConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete", role: .destructive) {
-                        onDelete()
-                    }
-                    Button("Cancel", role: .cancel) { }
-                }
             }
         }
         .padding(.horizontal, 8)

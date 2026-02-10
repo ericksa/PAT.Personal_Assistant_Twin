@@ -22,9 +22,9 @@ def create_app(job_service=None, scheduler_service=None):
         job_service = JobSearchService()
 
     if scheduler_service is None:
-        from core.scheduler import JobSearchScheduler
+        from core.simple_scheduler import SimpleJobSearchScheduler
 
-        scheduler_service = JobSearchScheduler(job_service)
+        scheduler_service = SimpleJobSearchScheduler(job_service)
 
     @app.get("/health")
     async def health_check():

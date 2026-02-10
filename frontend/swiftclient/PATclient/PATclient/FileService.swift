@@ -7,7 +7,7 @@
 
 import Foundation
 import AppKit
-internal import UniformTypeIdentifiers
+import UniformTypeIdentifiers
 
 class FileService {
     static let shared = FileService()
@@ -29,6 +29,13 @@ class FileService {
             throw FileError.userCancelled
         }
         
+        let shouldStopAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
         let markdownContent = generateMarkdown(from: messages, sessionTitle: sessionTitle)
         try markdownContent.write(to: url, atomically: true, encoding: .utf8)
         
@@ -46,6 +53,13 @@ class FileService {
         let response = savePanel.runModal()
         guard response == .OK, let url = savePanel.url else {
             throw FileError.userCancelled
+        }
+        
+        let shouldStopAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
         }
         
         let exportData = ChatExport(
@@ -69,43 +83,58 @@ class FileService {
     @MainActor
     func selectFileToUpload() throws -> URL {
         let openPanel = NSOpenPanel()
-        openPanel.allowedContentTypes = [.plainText, .pdf, .text, .utf8PlainText, .utf16PlainText]
+        openPanel.allowedContentTypes = [.plainText, .utf8PlainText, .utf16PlainText, .text, .pdf]
         openPanel.allowsMultipleSelection = false
         openPanel.canChooseDirectories = false
         openPanel.canChooseFiles = true
         openPanel.title = "Select Document to Upload"
         openPanel.prompt = "Upload"
-        
-        // Ensure we're properly modal to the key window
-        if let keyWindow = NSApplication.shared.keyWindow {
-            openPanel.beginSheetModal(for: keyWindow) { response in
-                // Handle via continuation if needed, but runModal() is simpler for now
-            }
-        }
+        openPanel.message = "Select a text or PDF document to upload"
         
         let response = openPanel.runModal()
         guard response == .OK, let url = openPanel.url else {
             throw FileError.userCancelled
         }
         
-        // Security-scoped resource handling for sandboxed apps
-        guard url.startAccessingSecurityScopedResource() else {
-            throw FileError.fileReadError
-        }
-        defer { url.stopAccessingSecurityScopedResource() }
-        
         return url
     }
     
     func readContent(from url: URL) throws -> String {
-        // Re-access security scoped resource if needed
-        guard url.startAccessingSecurityScopedResource() else {
-            // If it fails, try anyway - might not be sandboxed
-            return try String(contentsOf: url, encoding: .utf8)
-        }
-        defer { url.stopAccessingSecurityScopedResource() }
+        var isStale = false
+        let bookmarkData = try url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
         
-        return try String(contentsOf: url, encoding: .utf8)
+        let resolvedURL = try URL(
+            resolvingBookmarkData: bookmarkData,
+            options: .withSecurityScope,
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
+        
+        guard resolvedURL.startAccessingSecurityScopedResource() else {
+            throw FileError.fileReadError
+        }
+        defer {
+            resolvedURL.stopAccessingSecurityScopedResource()
+        }
+        
+        // Try UTF-8 first
+        if let content = try? String(contentsOf: resolvedURL, encoding: .utf8) {
+            return content
+        }
+        
+        // Try other encodings
+        let encodings: [String.Encoding] = [.utf8, .utf16, .isoLatin1, .macOSRoman, .ascii]
+        for encoding in encodings {
+            if let content = try? String(contentsOf: resolvedURL, encoding: encoding) {
+                return content
+            }
+        }
+        
+        throw FileError.fileReadError
     }
     
     private func generateMarkdown(from messages: [Message], sessionTitle: String) -> String {
@@ -160,38 +189,3 @@ class FileService {
     }
 }
 
-struct ChatExport: Codable {
-    let title: String
-    let exportedAt: Date
-    let messages: [Message]
-    let settings: ChatSettings
-}
-
-enum FileError: Error, LocalizedError {
-    case userCancelled
-    case fileReadError
-    case fileWriteError
-    case invalidFileFormat
-    
-    var errorDescription: String? {
-        switch self {
-        case .userCancelled:
-            return "Operation cancelled by user"
-        case .fileReadError:
-            return "Failed to read file"
-        case .fileWriteError:
-            return "Failed to write file"
-        case .invalidFileFormat:
-            return "Invalid file format"
-        }
-    }
-}
-
-extension String {
-    func sanitizedFilename() -> String {
-        let invalidCharacters = CharacterSet(charactersIn: ":/\\?*|\"<>")
-        return components(separatedBy: invalidCharacters).joined(separator: "_")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "_")
-    }
-}
