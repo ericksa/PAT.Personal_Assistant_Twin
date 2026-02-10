@@ -17,17 +17,37 @@ struct SettingsView: View {
                 
                 Section("Model Selection") {
                     Picker("LLM Provider", selection: $viewModel.llmProvider) {
+                        Text("Local Ollama").tag("ollama")
                         Text("Llama 2").tag("llama2")
                         Text("Llama 3").tag("llama3")
                         Text("Mistral").tag("mistral")
-                        Text("Ollama").tag("ollama")
                     }
                     .pickerStyle(.menu)
-                    
-                    Button("Check Available Models") {
+                    .onChange(of: viewModel.llmProvider) { _, _ in
                         Task {
-                            await viewModel.checkAllServices()
+                            await viewModel.refreshAvailableModels()
                         }
+                    }
+                    
+                    if !viewModel.availableModels.isEmpty {
+                        Picker("Model", selection: $viewModel.selectedModel) {
+                            ForEach(viewModel.availableModels, id: \.self) { model in
+                                Text(model).tag(model)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .disabled(viewModel.availableModels.isEmpty)
+                    }
+                    
+                    Button("Refresh Models") {
+                        Task {
+                            await viewModel.refreshAvailableModels()
+                        }
+                    }
+                    
+                    if viewModel.isRefreshingModels {
+                        ProgressView("Loading models...")
+                            .progressViewStyle(CircularProgressViewStyle())
                     }
                 }
                 
@@ -36,11 +56,9 @@ struct SettingsView: View {
                         get: { viewModel.useDarkMode },
                         set: { newValue in
                             viewModel.useDarkMode = newValue
-                            if var session = viewModel.currentSession {
-                                session.settings.useDarkMode = newValue
-                                viewModel.currentSession = session
-                                viewModel.saveSessionSettings()
-                            }
+                            viewModel.saveSessionSettings()
+                            // Apply theme change immediately
+                            NSApp.appearance = newValue ? NSAppearance(named: .darkAqua) : NSAppearance(named: .aqua)
                         }
                     ))
                 }

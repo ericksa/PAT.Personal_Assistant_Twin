@@ -8,6 +8,7 @@
 import Foundation
 import os.log
 import SwiftUI
+import SwiftUI
 
 class IngestService {
     static let shared = IngestService()
@@ -122,7 +123,7 @@ class IngestService {
         }
     }
     func ingestDocument(filename: String, content: String, metadata: [String: Any]? = nil) async throws -> IngestResponse {
-        let endpoint = "\(baseURL)/ingest"
+        let endpoint = "\(baseURL)/upload"
         logger.ingest.info("Starting document ingestion for: \(filename)")
         logger.logNetworkRequest(endpoint, method: "POST", body: "Content length: \(content.count)")
         
@@ -133,12 +134,12 @@ class IngestService {
         
         var body: [String: Any] = [
             "filename": filename,
-            "content": content
+            "content": content,
+            "metadata": metadata ?? [
+                "type": "document",
+                "tags": ["general", "uploaded"]
+            ]
         ]
-        
-        if let metadata = metadata {
-            body["metadata"] = metadata
-        }
         
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
@@ -296,6 +297,12 @@ class IngestService {
 }
 
 struct IngestResponse: Codable {
+    let status: String
+    let message: String
+    let document_id: String?
+}
+
+struct UploadResponse: Codable {
     let status: String
     let message: String
     let document_id: String?

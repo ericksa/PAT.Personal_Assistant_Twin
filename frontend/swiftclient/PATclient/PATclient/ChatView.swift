@@ -324,14 +324,26 @@ struct ChatView: View {
             Divider()
             
                 HStack(spacing: 12) {
+                Menu {
                     Button(action: {
                         Task { await viewModel.uploadDocument() }
                     }) {
-                        Image(systemName: "paperclip")
-                            .font(.title3)
-                            .foregroundColor(.secondary)
+                        Label("Upload Document", systemImage: "doc")
                     }
-                    .buttonStyle(.borderless)
+                    
+                    Divider()
+                    
+                    Button(action: {
+                        Task { await viewModel.uploadResume() }
+                    }) {
+                        Label("Upload Resume", systemImage: "person.crop.rectangle")
+                    }
+                } label: {
+                    Image(systemName: "paperclip")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.borderless)
                     
                     TextField("Type your message...", text: $viewModel.inputText, axis: .vertical)
                         .focused($isInputFocused)

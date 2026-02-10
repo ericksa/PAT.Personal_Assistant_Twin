@@ -1,6 +1,7 @@
 import SwiftUI
 import os.log
 import Combine
+import UniformTypeIdentifiers
 
 final class ChatViewModel: ObservableObject {
     // MARK: - Published properties
@@ -18,6 +19,11 @@ final class ChatViewModel: ObservableObject {
     @Published public var currentSession: ChatSession?
 
     @Published public var llmProvider: String = "ollama"
+    
+    // MARK: - LLM Model Management
+    @Published public var availableModels: [String] = []
+    @Published public var selectedModel: String = "llama3"
+    @Published public var isRefreshingModels: Bool = false
     
     // Add session service instance
     private let sessionService = SessionService.shared
@@ -208,7 +214,7 @@ final class ChatViewModel: ObservableObject {
 
         // Update settings from new session
         llmProvider = newSession.settings.provider
-        useDarkMode = newSession.settings.useDarkMode ?? false
+        useDarkMode = newSession.settings.useDarkMode
         
         // Save the new session
         do {
@@ -225,7 +231,7 @@ final class ChatViewModel: ObservableObject {
 
         // Update settings from loaded session
         llmProvider = session.settings.provider
-        useDarkMode = session.settings.useDarkMode ?? false
+        useDarkMode = session.settings.useDarkMode
         
         // Update toggles to match session settings
         useWebSearch = session.settings.useWebSearch
@@ -268,17 +274,106 @@ final class ChatViewModel: ObservableObject {
         }
     }
     
+    /// Refresh available LLM models from Ollama
+    public func refreshAvailableModels() async {
+        await MainActor.run {
+            self.isRefreshingModels = true
+        }
+        
+        do {
+            let modelList = try await LLMService.shared.listModels()
+            await MainActor.run {
+                self.availableModels = modelList.map { $0.name }
+                if !self.availableModels.isEmpty && !self.availableModels.contains(self.selectedModel) {
+                    self.selectedModel = self.availableModels.first ?? "llama3"
+                }
+                self.isRefreshingModels = false
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to load models: \(error.localizedDescription)"
+                self.isRefreshingModels = false
+            }
+            logger.general.error("Failed to refresh models: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Uploads a resume with metadata asynchronously.
+    public func uploadResume() async {
+        logger.general.info("Resume upload initiated")
+        
+        do {
+            let openPanel = NSOpenPanel()
+            openPanel.allowedContentTypes = [.pdf, .text, .plainText]
+            openPanel.allowsMultipleSelection = false
+            openPanel.canChooseDirectories = false
+            openPanel.canChooseFiles = true
+            openPanel.title = "Select Resume to Upload"
+            openPanel.prompt = "Upload"
+            openPanel.message = "Select a PDF or text file containing your resume"
+            
+            let response = await MainActor.run {
+                return openPanel.runModal()
+            }
+            
+            guard response == .OK, let fileURL = openPanel.url else {
+                logger.general.info("User cancelled resume upload")
+                return
+            }
+            
+            let metadata: [String: Any] = [
+                "type": "resume",
+                "tags": ["software", "engineer"]
+            ]
+            
+            let uploadResponse = try await IngestService.shared.uploadResume(
+                filePath: fileURL.path,
+                metadata: metadata
+            )
+            
+            await MainActor.run {
+                self.errorMessage = nil
+                let systemMessage = Message(
+                    type: .system,
+                    content: "Resume uploaded: \(fileURL.lastPathComponent) (ID: \(uploadResponse.document_id ?? "Unknown"))",
+                    timestamp: Date()
+                )
+                self.messages.append(systemMessage)
+                self.saveCurrentSession()
+            }
+            
+            logger.general.info("Resume upload completed successfully")
+            
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to upload resume: \(error.localizedDescription)"
+            }
+            logger.general.error("Resume upload failed: \(error.localizedDescription)")
+        }
+    }
+    
     /// Saves current session settings.
     public func saveSessionSettings() {
         guard var session = currentSession else { return }
         
         session.settings.useWebSearch = useWebSearch
         session.settings.useMemoryContext = useMemoryContext
-        session.settings.provider = llmProvider
+        session.settings.llmProvider = llmProvider
         session.settings.useDarkMode = useDarkMode
+        session.settings.selectedModel = selectedModel
         
         currentSession = session
         saveCurrentSession()
+    }
+    
+    /// Load session settings
+    public func loadSessionSettings() {
+        guard let session = currentSession else { return }
+        useWebSearch = session.settings.useWebSearch
+        useMemoryContext = session.settings.useMemoryContext
+        llmProvider = session.settings.llmProvider
+        useDarkMode = session.settings.useDarkMode
+        selectedModel = session.settings.selectedModel
     }
     
     /// Save the current session

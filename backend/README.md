@@ -375,9 +375,9 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 ## 📚 Documentation
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Development guidelines
+- [CONTRIBUTING.md](docs/CONTRIBUTING.md) - Development guidelines
 - [docs/FUTURE_ENHANCEMENTS.md](docs/FUTURE_ENHANCEMENTS.md) - Planned features
-- [CHANGES.md](CHANGES.md) - Version history
+- [CHANGES.md](docs/CHANGES.md) - Version history
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture details
 
 ## 👥 Support

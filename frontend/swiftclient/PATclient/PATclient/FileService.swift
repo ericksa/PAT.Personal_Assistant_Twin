@@ -17,17 +17,17 @@ struct ChatExport: Codable {
 }
 
 class FileService {
+    static let shared = FileService()
     
-    // MARK: - String extension helper
-    private func sanitizedFilename(_ title: String) -> String {
+    private init() {}
+    
+    // MARK: - String filename helper
+    private static func sanitizedFilename(_ title: String) -> String {
         let invalidCharacters = CharacterSet(charactersIn: ":/\\?*|\"< >")
         return title.components(separatedBy: invalidCharacters).joined(separator: "_")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: " ", with: "_")
     }
-    static let shared = FileService()
-    
-    private init() {}
     
     // MARK: - Export Methods (MainActor required for NSSavePanel)
     
@@ -35,7 +35,7 @@ class FileService {
     func exportChatAsMarkdown(messages: [Message], sessionTitle: String) throws -> URL {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.plainText]
-        savePanel.nameFieldStringValue = "\(sanitizedFilename(sessionTitle)).md"
+        savePanel.nameFieldStringValue = "\(FileService.sanitizedFilename(sessionTitle)).md"
         savePanel.title = "Export Chat as Markdown"
         savePanel.prompt = "Save"
         
@@ -61,7 +61,7 @@ class FileService {
     func exportChatAsJSON(messages: [Message], sessionTitle: String, settings: ChatSettings) throws -> URL {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.json]
-        savePanel.nameFieldStringValue = "\(sanitizedFilename(sessionTitle)).json"
+        savePanel.nameFieldStringValue = "\(FileService.sanitizedFilename(sessionTitle)).json"
         savePanel.title = "Export Chat as JSON"
         savePanel.prompt = "Save"
         
