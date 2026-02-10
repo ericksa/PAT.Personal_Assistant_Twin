@@ -1,31 +1,18 @@
-# services/jobs/app.py - Job Search and Resume Customization Service
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
+# services/jobs/core/job_service.py - Job Search Service Logic
 from typing import List, Dict, Optional
 import logging
 import os
-import asyncio
-import httpx
-import json
 import re
 from datetime import datetime, timedelta
 from enum import Enum
 
-from .notification_service import NotificationService, MockNotificationService
-from .scheduler import scheduler
+# Import models
+from models.job_listing import JobListing, JobSearchRequest
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="PAT Job Search Service")
-
 # Configuration
-LINKEDIN_CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID")
-LINKEDIN_CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET")
-PAT_NOTIFICATION_EMAIL = os.getenv("PAT_NOTIFICATION_EMAIL")
-AGENCY_PRIORITY = os.getenv("GOVERNMENT_AGENCY_PRIORITY", "VA,DHA,DOD,DOT").split(",")
-
-# Agency priority mapping (VA highest priority, DOT lowest)
 AGENCY_PRIORITY_SCORES = {"VA": 4, "DHA": 3, "DOD": 2, "DOT": 1}
 
 # Clearance requirement patterns
@@ -38,52 +25,12 @@ CLEARANCE_PATTERNS = [
 ]
 
 
-class JobStatus(str, Enum):
-    NEW = "new"
-    REVIEWED = "reviewed"
-    INTERESTED = "interested"
-    APPLIED = "applied"
-
-
-class ApplicationStatus(str, Enum):
-    INTERESTED = "interested"
-    APPLIED = "applied"
-    INTERVIEW = "interview"
-    REJECTED = "rejected"
-    OFFER = "offer"
-
-
-class JobSearchRequest(BaseModel):
-    keywords: str = "government secret clearance senior software engineer"
-    location: str = "remote"
-    company_filter: Optional[List[str]] = None
-    days_back: int = 7  # Search jobs posted in last N days
-
-
-class JobListing(BaseModel):
-    id: Optional[str] = None
-    title: str
-    company: str
-    location: str
-    agency: Optional[str] = None
-    clearance_required: bool = False
-    salary_range: Optional[str] = None
-    description: str
-    requirements: Optional[str] = None
-    url: str
-    match_score: float = 0.0
-    agency_score: int = 0
-    posted_date: Optional[datetime] = None
-    source: str = "linkedin"
-    status: JobStatus = JobStatus.NEW
-
-
 class LinkedInClient:
     """LinkedIn Jobs API client"""
 
     def __init__(self):
-        self.client_id = LINKEDIN_CLIENT_ID
-        self.client_secret = LINKEDIN_CLIENT_SECRET
+        self.client_id = os.getenv("LINKEDIN_CLIENT_ID")
+        self.client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
         self.access_token = None
         self.token_expires = None
 
@@ -97,8 +44,6 @@ class LinkedInClient:
             return True
 
         try:
-            # Implement LinkedIn OAuth2 authentication
-            # This is a placeholder - real implementation would use proper LinkedIn SDK
             logger.info("Authenticating with LinkedIn API")
             # Simulate authentication
             self.access_token = "linkedin_simulated_token"
@@ -116,7 +61,6 @@ class LinkedInClient:
             return []
 
         try:
-            # Simulate job search - in real implementation, call LinkedIn Jobs API
             logger.info(f"Searching LinkedIn jobs: {keywords} in {location}")
 
             # Mock job data for development
@@ -273,90 +217,3 @@ class JobSearchService:
         except Exception as e:
             logger.error(f"Government job search failed: {e}")
             return []
-
-
-# Global service instance
-job_service = JobSearchService()
-
-# Email service (use mock if no SMTP configured)
-notification_service = (
-    NotificationService() if os.getenv("SMTP_PASSWORD") else MockNotificationService()
-)
-
-
-# Startup event to start scheduler
-@app.on_event("startup")
-async def startup_event():
-    """Start automated job search scheduler"""
-    if os.getenv("JOB_SEARCH_ENABLED", "true").lower() == "true":
-        scheduler.start_scheduled_searches()
-        logger.info("Job search scheduler started")
-
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "job-search"}
-
-
-@app.get("/scheduler/status")
-async def scheduler_status():
-    """Get scheduler status"""
-    jobs = scheduler.scheduler.get_jobs()
-    return {
-        "status": "running",
-        "scheduled_jobs": len(jobs),
-        "next_runtime": str(jobs[0].next_run_time) if jobs else "No scheduled jobs",
-    }
-
-
-@app.post("/jobs/alert")
-async def send_job_alert(job_ids: List[str]):
-    """Send email alert for specific jobs"""
-    # TODO: Retrieve jobs from database and send alert
-    return {"status": "success", "message": "Job alert sent"}
-
-
-@app.post("/search")
-async def search_jobs(request: JobSearchRequest, background_tasks: BackgroundTasks):
-    """Search for government contracting jobs"""
-    try:
-        jobs = await job_service.search_government_jobs(request)
-
-        # Store jobs in database in background
-        background_tasks.add_task(store_jobs_in_database, jobs)
-
-        return {
-            "status": "success",
-            "jobs_found": len(jobs),
-            "jobs": [job.dict() for job in jobs[:10]],  # Return top 10
-            "message": f"Found {len(jobs)} government contracting jobs",
-        }
-    except Exception as e:
-        logger.error(f"Job search endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-
-@app.get("/jobs")
-async def get_jobs(status: Optional[JobStatus] = None, limit: int = 50):
-    """Get stored job listings"""
-    # TODO: Implement database query
-    return {"status": "success", "jobs": [], "message": "Database integration pending"}
-
-
-@app.post("/jobs/{job_id}/apply")
-async def mark_applied(job_id: str):
-    """Mark job as applied"""
-    # TODO: Implement database update
-    return {"status": "success", "message": f"Marked job {job_id} as applied"}
-
-
-async def store_jobs_in_database(jobs: List[JobListing]):
-    """Store jobs in database (background task)"""
-    # TODO: Implement database storage
-    logger.info(f"Storing {len(jobs)} jobs in database")
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8007)

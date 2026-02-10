@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine  // Add this import
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -18,7 +19,7 @@ struct SettingsView: View {
                         Text("Llama 2").tag("llama2")
                         Text("Llama 3").tag("llama3")
                         Text("Mistral").tag("mistral")
-                        Text("Ollama").tag("ollama") // Fixed: Added missing tag
+                        Text("Ollama").tag("ollama")
                     }
                     .pickerStyle(.menu)
                     

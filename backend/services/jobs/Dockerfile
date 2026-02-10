@@ -15,4 +15,4 @@ COPY . .
 
 EXPOSE 8007
 
-CMD ["python", "app.py"]
+CMD ["python", "main.py"]

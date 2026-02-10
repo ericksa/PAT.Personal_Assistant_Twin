@@ -5,14 +5,6 @@
 //  Created by Adam Erickson on 1/22/26.
 //
 
-
-//
-//  ChatSession.swift
-//  PATclient
-//
-//  Chat session model for persistence
-//
-
 import Foundation
 
 struct ChatSession: Identifiable, Codable, Hashable {
@@ -57,13 +49,15 @@ struct ChatSettings: Codable, Hashable {
     var provider: String
     var temperature: Double
     var maxTokens: Int
+    var useDarkMode: Bool?  // Added this property
     
-    init(useWebSearch: Bool = false, useMemoryContext: Bool = true, provider: String = "ollama", temperature: Double = 0.7, maxTokens: Int = 2048) {
+    init(useWebSearch: Bool = false, useMemoryContext: Bool = true, provider: String = "ollama", temperature: Double = 0.7, maxTokens: Int = 2048, useDarkMode: Bool? = nil) {
         self.useWebSearch = useWebSearch
         self.useMemoryContext = useMemoryContext
         self.provider = provider
         self.temperature = temperature
         self.maxTokens = maxTokens
+        self.useDarkMode = useDarkMode
     }
     
     func hash(into hasher: inout Hasher) {
@@ -72,6 +66,7 @@ struct ChatSettings: Codable, Hashable {
         hasher.combine(provider)
         hasher.combine(temperature)
         hasher.combine(maxTokens)
+        hasher.combine(useDarkMode)
     }
     
     static func == (lhs: ChatSettings, rhs: ChatSettings) -> Bool {
@@ -79,6 +74,7 @@ struct ChatSettings: Codable, Hashable {
         lhs.useMemoryContext == rhs.useMemoryContext &&
         lhs.provider == rhs.provider &&
         lhs.temperature == rhs.temperature &&
-        lhs.maxTokens == rhs.maxTokens
+        lhs.maxTokens == rhs.maxTokens &&
+        lhs.useDarkMode == rhs.useDarkMode
     }
 }

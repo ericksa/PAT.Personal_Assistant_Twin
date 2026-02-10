@@ -1,4 +1,4 @@
-# services/jobs/scheduler.py - Automated Job Search Scheduler
+# services/jobs/core/scheduler.py - Scheduler Logic
 import asyncio
 import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 import os
 from typing import List, Dict
 
-# Job service is imported inside the function to avoid circular imports
-from .notification_service import NotificationService, MockNotificationService
+# Import notification service
+from notification_service import NotificationService, MockNotificationService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,20 +17,23 @@ logger = logging.getLogger(__name__)
 class JobSearchScheduler:
     """Automated job search scheduler"""
 
-    def __init__(self):
+    def __init__(self, job_service, notification_service=None):
+        self.job_service = job_service
         self.scheduler = AsyncIOScheduler()
-        # Use mock notifications if SMTP not configured
+
+        # Use provided notification service or create mock
         self.notification_service = (
-            NotificationService()
-            if os.getenv("SMTP_PASSWORD")
-            else MockNotificationService()
+            notification_service
+            if notification_service
+            else (
+                NotificationService()
+                if os.getenv("SMTP_PASSWORD")
+                else MockNotificationService()
+            )
         )
 
     def start_scheduled_searches(self):
         """Start automated job searches"""
-        # Schedule daily search at 8 AM EST (convert to UTC if needed)
-        # CRON format: minute hour day month day_of_week
-        # 0 8 * * * = 8 AM daily
         schedule = os.getenv("JOB_SEARCH_SCHEDULE", "0 8 * * *")
 
         try:
@@ -52,8 +55,8 @@ class JobSearchScheduler:
         try:
             logger.info("Starting daily government job search...")
 
-            # Search for government jobs - dynamic import to avoid circular imports
-            from app import job_service, JobSearchRequest
+            # Import JobSearchRequest dynamically
+            from models.job_listing import JobSearchRequest
 
             search_request = JobSearchRequest(
                 keywords="government secret clearance senior software engineer backend java spring boot aws",
@@ -61,7 +64,7 @@ class JobSearchScheduler:
                 days_back=7,  # Last week only
             )
 
-            jobs = await job_service.search_government_jobs(search_request)
+            jobs = await self.job_service.search_government_jobs(search_request)
 
             # Filter for high-quality matches
             high_quality_jobs = [
@@ -76,7 +79,7 @@ class JobSearchScheduler:
 
                 # Send email notification
                 success = await self.notification_service.send_job_alert(
-                    high_quality_jobs, daily_summary=True
+                    [job.dict() for job in high_quality_jobs], daily_summary=True
                 )
 
                 if success:
@@ -85,7 +88,9 @@ class JobSearchScheduler:
                     logger.warning("Failed to send job alert email")
 
                 # Store jobs in database
-                await self._store_jobs_in_database(high_quality_jobs)
+                await self._store_jobs_in_database(
+                    [job.dict() for job in high_quality_jobs]
+                )
 
             else:
                 logger.info("No high-quality jobs found today")
@@ -108,17 +113,3 @@ class JobSearchScheduler:
         """Stop the scheduler"""
         self.scheduler.shutdown()
         logger.info("Stopped job search scheduler")
-
-
-# Global scheduler instance
-scheduler = JobSearchScheduler()
-
-
-async def start_scheduler():
-    """Start the scheduler"""
-    scheduler.start_scheduled_searches()
-
-
-async def stop_scheduler():
-    """Stop the scheduler"""
-    scheduler.stop_scheduler()

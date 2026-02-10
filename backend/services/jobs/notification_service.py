@@ -1,7 +1,7 @@
 # services/jobs/notification_service.py - Email Notification Service
 import smtplib
-from email.mime.text import MimeText
-from email.mime.multipart import MimeMultipart
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import logging
 import os
 from typing import List, Dict
@@ -121,18 +121,18 @@ class NotificationService:
         """Send email using SMTP"""
         try:
             # Create message
-            msg = MimeMultipart()
-            msg["From"] = self.smtp_username
-            msg["To"] = self.recipient_email
+            msg = MIMEMultipart()
+            msg["From"] = str(self.smtp_username)
+            msg["To"] = str(self.recipient_email)
             msg["Subject"] = subject
 
             # Add HTML body
-            msg.attach(MimeText(body, "html"))
+            msg.attach(MIMEText(body, "html"))
 
             # Connect to SMTP server and send
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
                 server.starttls()
-                server.login(self.smtp_username, self.smtp_password)
+                server.login(str(self.smtp_username), str(self.smtp_password))
                 server.send_message(msg)
 
         except Exception as e:

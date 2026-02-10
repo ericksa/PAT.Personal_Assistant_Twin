@@ -2,14 +2,6 @@
 //  FileService.swift
 //  PATclient
 //
-//  Created by Adam Erickson on 1/22/26.
-//
-
-
-//
-//  FileService.swift
-//  PATclient
-//
 //  Service for file operations and markdown export
 //
 
@@ -22,6 +14,9 @@ class FileService {
     
     private init() {}
     
+    // MARK: - Export Methods (MainActor required for NSSavePanel)
+    
+    @MainActor
     func exportChatAsMarkdown(messages: [Message], sessionTitle: String) throws -> URL {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.plainText]
@@ -40,6 +35,7 @@ class FileService {
         return url
     }
     
+    @MainActor
     func exportChatAsJSON(messages: [Message], sessionTitle: String, settings: ChatSettings) throws -> URL {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.json]
@@ -68,24 +64,47 @@ class FileService {
         return url
     }
     
+    // MARK: - Upload Method (MainActor required for NSOpenPanel)
+    
+    @MainActor
     func selectFileToUpload() throws -> URL {
         let openPanel = NSOpenPanel()
-        openPanel.allowedContentTypes = [.plainText, .pdf, .text]
+        openPanel.allowedContentTypes = [.plainText, .pdf, .text, .utf8PlainText, .utf16PlainText]
         openPanel.allowsMultipleSelection = false
         openPanel.canChooseDirectories = false
         openPanel.canChooseFiles = true
         openPanel.title = "Select Document to Upload"
         openPanel.prompt = "Upload"
         
+        // Ensure we're properly modal to the key window
+        if let keyWindow = NSApplication.shared.keyWindow {
+            openPanel.beginSheetModal(for: keyWindow) { response in
+                // Handle via continuation if needed, but runModal() is simpler for now
+            }
+        }
+        
         let response = openPanel.runModal()
         guard response == .OK, let url = openPanel.url else {
             throw FileError.userCancelled
         }
         
+        // Security-scoped resource handling for sandboxed apps
+        guard url.startAccessingSecurityScopedResource() else {
+            throw FileError.fileReadError
+        }
+        defer { url.stopAccessingSecurityScopedResource() }
+        
         return url
     }
     
     func readContent(from url: URL) throws -> String {
+        // Re-access security scoped resource if needed
+        guard url.startAccessingSecurityScopedResource() else {
+            // If it fails, try anyway - might not be sandboxed
+            return try String(contentsOf: url, encoding: .utf8)
+        }
+        defer { url.stopAccessingSecurityScopedResource() }
+        
         return try String(contentsOf: url, encoding: .utf8)
     }
     

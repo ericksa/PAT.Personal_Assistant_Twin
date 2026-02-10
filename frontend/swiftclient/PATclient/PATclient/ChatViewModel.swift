@@ -1,5 +1,6 @@
 import SwiftUI
 import os.log
+import Combine
 
 final class ChatViewModel: ObservableObject {
     // MARK: - Published properties
@@ -66,11 +67,16 @@ final class ChatViewModel: ObservableObject {
     
     /// Send a message
     public func sendMessage() async {
-        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let messageContent = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !messageContent.isEmpty else { return }
+        
+        // Capture settings before async work
+        let currentWebSearch = useWebSearch
+        let currentMemory = useMemoryContext
         
         await MainActor.run {
             self.isProcessing = true
-            let userMessage = Message(type: .user, content: inputText, timestamp: Date())
+            let userMessage = Message(type: .user, content: messageContent, timestamp: Date())
             self.messages.append(userMessage)
             self.inputText = ""
         }
@@ -78,9 +84,9 @@ final class ChatViewModel: ObservableObject {
         // Use AgentService to send the message
         do {
             let response = try await AgentService.shared.query(
-                text: inputText,
-                webSearch: useWebSearch,
-                useMemory: useMemoryContext,
+                text: messageContent,  // Use captured content, not the cleared property
+                webSearch: currentWebSearch,
+                useMemory: currentMemory,
                 userId: "default",
                 stream: false
             )
@@ -113,6 +119,10 @@ final class ChatViewModel: ObservableObject {
     public func regenerateLastResponse() async {
         guard let lastUserMessage = messages.last(where: { $0.type == .user }) else { return }
         
+        // Capture settings before async work
+        let currentWebSearch = useWebSearch
+        let currentMemory = useMemoryContext
+        
         await MainActor.run {
             self.isProcessing = true
             
@@ -126,8 +136,8 @@ final class ChatViewModel: ObservableObject {
         do {
             let response = try await AgentService.shared.query(
                 text: lastUserMessage.content,
-                webSearch: useWebSearch,
-                useMemory: useMemoryContext,
+                webSearch: currentWebSearch,
+                useMemory: currentMemory,
                 userId: "default",
                 stream: false
             )
@@ -156,6 +166,41 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Message Management
+    
+    /// Delete a specific message by ID
+    public func deleteMessage(id: UUID) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        
+        messages.remove(at: index)
+        saveCurrentSession()
+        logger.general.info("Deleted message \(id.uuidString)")
+    }
+    
+    /// Delete a message at a specific index
+    public func deleteMessage(at index: Int) {
+        guard index >= 0 && index < messages.count else { return }
+        let removedId = messages[index].id
+        messages.remove(at: index)
+        saveCurrentSession()
+        logger.general.info("Deleted message at index \(index) (ID: \(removedId.uuidString))")
+    }
+    
+    /// Clear all messages in current chat
+    public func clearMessages() {
+        let count = messages.count
+        messages.removeAll()
+        saveCurrentSession()
+        logger.general.info("Cleared \(count) messages from session")
+    }
+    
+    /// Delete the last message (useful for undo)
+    public func deleteLastMessage() {
+        guard !messages.isEmpty else { return }
+        messages.removeLast()
+        saveCurrentSession()
+    }
+
     public func startNewSession() {
         let newSession = ChatSession(id: UUID(), title: "New Session", messages: [])
         currentSession = newSession
@@ -163,7 +208,7 @@ final class ChatViewModel: ObservableObject {
 
         // Update settings from new session
         llmProvider = newSession.settings.provider
-        useDarkMode = newSession.settings.useDarkMode
+        useDarkMode = newSession.settings.useDarkMode ?? false
         
         // Save the new session
         do {
@@ -180,7 +225,7 @@ final class ChatViewModel: ObservableObject {
 
         // Update settings from loaded session
         llmProvider = session.settings.provider
-        useDarkMode = session.settings.useDarkMode
+        useDarkMode = session.settings.useDarkMode ?? false
         
         // Update toggles to match session settings
         useWebSearch = session.settings.useWebSearch
@@ -192,7 +237,8 @@ final class ChatViewModel: ObservableObject {
         logger.general.info("Document upload initiated")
         
         do {
-            let fileURL = try FileService.shared.selectFileToUpload()
+            // FileService methods are now @MainActor, so this hop is explicit
+            let fileURL = try await FileService.shared.selectFileToUpload()
             let content = try FileService.shared.readContent(from: fileURL)
             
             let response = try await IngestService.shared.ingestDocument(
@@ -201,14 +247,24 @@ final class ChatViewModel: ObservableObject {
             )
             
             await MainActor.run {
-                self.errorMessage = "Document uploaded successfully: \(response.document_id ?? "Unknown ID")"
+                // Success message instead of error
+                self.errorMessage = nil
+                // Optionally add a system message about successful upload
+                let systemMessage = Message(
+                    type: .system,
+                    content: "Document uploaded: \(fileURL.lastPathComponent) (ID: \(response.document_id ?? "Unknown"))",
+                    timestamp: Date()
+                )
+                self.messages.append(systemMessage)
+                self.saveCurrentSession()
             }
         } catch FileError.userCancelled {
-            // User cancelled, do nothing
+            logger.general.info("User cancelled document upload")
         } catch {
             await MainActor.run {
                 self.errorMessage = "Failed to upload document: \(error.localizedDescription)"
             }
+            logger.general.error("Document upload failed: \(error.localizedDescription)")
         }
     }
     
@@ -227,7 +283,12 @@ final class ChatViewModel: ObservableObject {
     
     /// Save the current session
     private func saveCurrentSession() {
-        guard let session = currentSession else { return }
+        guard var session = currentSession else { return }
+        
+        // Update session messages and timestamp
+        session.messages = messages
+        session.updatedAt = Date()
+        currentSession = session
         
         do {
             try sessionService.saveSession(session)
@@ -241,15 +302,36 @@ final class ChatViewModel: ObservableObject {
     public func exportAsMarkdown() {
         guard let session = currentSession else { return }
         
-        do {
-            _ = try FileService.shared.exportChatAsMarkdown(
-                messages: messages,
-                sessionTitle: session.title
-            )
-        } catch FileError.userCancelled {
-            // User cancelled, do nothing
-        } catch {
-            errorMessage = "Failed to export chat: \(error.localizedDescription)"
+        Task { @MainActor in
+            do {
+                _ = try FileService.shared.exportChatAsMarkdown(
+                    messages: messages,
+                    sessionTitle: session.title
+                )
+            } catch FileError.userCancelled {
+                // User cancelled, do nothing
+            } catch {
+                errorMessage = "Failed to export chat: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /// Export current session as JSON
+    public func exportAsJSON() {
+        guard let session = currentSession else { return }
+        
+        Task { @MainActor in
+            do {
+                _ = try FileService.shared.exportChatAsJSON(
+                    messages: messages,
+                    sessionTitle: session.title,
+                    settings: session.settings
+                )
+            } catch FileError.userCancelled {
+                // User cancelled, do nothing
+            } catch {
+                errorMessage = "Failed to export chat: \(error.localizedDescription)"
+            }
         }
     }
 }
