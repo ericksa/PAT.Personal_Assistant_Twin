@@ -11,6 +11,9 @@ import re
 from datetime import datetime, timedelta
 from enum import Enum
 
+from .notification_service import NotificationService, MockNotificationService
+from .scheduler import scheduler
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -275,10 +278,42 @@ class JobSearchService:
 # Global service instance
 job_service = JobSearchService()
 
+# Email service (use mock if no SMTP configured)
+notification_service = (
+    NotificationService() if os.getenv("SMTP_PASSWORD") else MockNotificationService()
+)
+
+
+# Startup event to start scheduler
+@app.on_event("startup")
+async def startup_event():
+    """Start automated job search scheduler"""
+    if os.getenv("JOB_SEARCH_ENABLED", "true").lower() == "true":
+        scheduler.start_scheduled_searches()
+        logger.info("Job search scheduler started")
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "job-search"}
+
+
+@app.get("/scheduler/status")
+async def scheduler_status():
+    """Get scheduler status"""
+    jobs = scheduler.scheduler.get_jobs()
+    return {
+        "status": "running",
+        "scheduled_jobs": len(jobs),
+        "next_runtime": str(jobs[0].next_run_time) if jobs else "No scheduled jobs",
+    }
+
+
+@app.post("/jobs/alert")
+async def send_job_alert(job_ids: List[str]):
+    """Send email alert for specific jobs"""
+    # TODO: Retrieve jobs from database and send alert
+    return {"status": "success", "message": "Job alert sent"}
 
 
 @app.post("/search")

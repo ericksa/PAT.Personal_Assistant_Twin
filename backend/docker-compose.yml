@@ -171,6 +171,23 @@ services:
     ports:
       - "8004:8000"
 
+  # Job Search Service
+  # ----------------------------
+  job-search-service:
+    build: ./services/jobs
+    container_name: job-search-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://llm:llm@postgres:5432/llm
+      LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
+      LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET}
+      PAT_NOTIFICATION_EMAIL: ${PAT_NOTIFICATION_EMAIL}
+      GOVERNMENT_AGENCY_PRIORITY: ${GOVERNMENT_AGENCY_PRIORITY}
+    depends_on:
+      - postgres
+    ports:
+      - "8007:8007"
+
 volumes:
   pgdata:
   redisdata:

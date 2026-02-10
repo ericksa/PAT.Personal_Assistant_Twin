@@ -16,3 +16,6 @@ aiosmtplib==3.0.1
 # Job parsing and analysis
 spacy==3.7.5
 # python -m spacy download en_core_web_sm
+
+# Scheduling
+APScheduler==3.10.4
