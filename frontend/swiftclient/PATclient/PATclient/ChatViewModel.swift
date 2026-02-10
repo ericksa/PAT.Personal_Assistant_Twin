@@ -44,6 +44,7 @@ final class ChatViewModel: ObservableObject {
     @Published public var isProcessing: Bool = false
     @Published public var useWebSearch: Bool = false
     @Published public var useMemoryContext: Bool = true
+    @Published public var useDarkMode: Bool = false  // ✅ Added missing property
     @Published public var ingestStatus: ServiceStatus = .healthy
     @Published public var ollamaStatus: ServiceStatus = .disconnected
     @Published public var agentStatus: ServiceStatus = .disconnected

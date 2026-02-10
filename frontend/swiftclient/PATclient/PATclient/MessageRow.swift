@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MessageRow: View {
     let message: Message
+    let viewModel: ChatViewModel  // ✅ Added viewModel parameter
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -213,12 +214,14 @@ struct MessageRow: View {
 }
 
 #Preview {
+    let viewModel = ChatViewModel()  // ✅ Create viewModel for preview
+    
     VStack(spacing: 0) {
         MessageRow(message: Message(
             type: .user,
             content: "What is the current weather in San Francisco?",
             timestamp: Date()
-        ))
+        ), viewModel: viewModel)
         
         Divider()
         
@@ -233,7 +236,7 @@ struct MessageRow: View {
             toolsUsed: ["web"],
             modelUsed: "llama2",
             processingTime: 2.34
-        ))
+        ), viewModel: viewModel)
     }
 }
 

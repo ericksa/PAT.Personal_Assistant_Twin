@@ -9,6 +9,7 @@ import numpy as np
 import wave
 import struct
 import json
+import shutil
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -206,27 +207,6 @@ def preprocess_audio(input_path: str, output_path: str):
                 logger.warning("Audio preprocessing failed, using original file")
             except Exception as copy_error:
                 logger.error(f"Failed to copy audio file: {copy_error}")
-
-        # Final result
-        final_timestamp = 0.0
-        if segments:
-            segment_list = list(segments)
-            if segment_list:
-                final_timestamp = segment_list[-1].end
-
-        yield {
-            "partial": current_transcription,
-            "final": True,
-            "timestamp": final_timestamp,
-        }
-
-    except Exception as e:
-        logger.error(f"Streaming transcription failed: {e}")
-        yield {
-            "partial": f"Transcription error: {str(e)}",
-            "final": True,
-            "timestamp": 0.0,
-        }
 
 
 async def transcribe_audio_local(file_path: str) -> str:
