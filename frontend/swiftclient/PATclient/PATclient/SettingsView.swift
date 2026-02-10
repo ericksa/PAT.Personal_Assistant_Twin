@@ -1,5 +1,6 @@
 import SwiftUI
-import Combine  // Add this import
+import Combine
+import os.log
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss

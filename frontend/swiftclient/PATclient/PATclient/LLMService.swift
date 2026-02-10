@@ -53,7 +53,7 @@ class LLMService {
     private let baseURL: String
     private let session: URLSession
     
-    private init(baseURL: String = "http://127.0.0.1:11434") {
+    private init(baseURL: String = Config.ollamaBaseURL) {
         self.baseURL = baseURL
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30

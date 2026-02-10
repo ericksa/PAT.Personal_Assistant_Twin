@@ -323,52 +323,52 @@ struct ChatView: View {
             
             Divider()
             
-            HStack(spacing: 12) {
-                Button(action: {
-                    // TODO: Implement file attachment
-                }) {
-                    Image(systemName: "paperclip")
-                        .font(.title3)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.borderless)
-                
-                TextField("Type your message...", text: $viewModel.inputText, axis: .vertical)
-                    .focused($isInputFocused)
-                    .font(.body)
-                    .lineLimit(1...6) // Allow 1-6 lines
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(nsColor: .textBackgroundColor))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
-                
-                Button(action: {
-                    Task {
-                        await viewModel.sendMessage()
+                HStack(spacing: 12) {
+                    Button(action: {
+                        Task { await viewModel.uploadDocument() }
+                    }) {
+                        Image(systemName: "paperclip")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
                     }
-                }) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.title3)
-                        .foregroundColor(
-                            viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.areServicesHealthy()
-                            ? .secondary
-                            : .blue
+                    .buttonStyle(.borderless)
+                    
+                    TextField("Type your message...", text: $viewModel.inputText, axis: .vertical)
+                        .focused($isInputFocused)
+                        .font(.body)
+                        .lineLimit(1...6) // Allow 1-6 lines
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(nsColor: .textBackgroundColor))
                         )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    
+                    Button(action: {
+                        Task {
+                            await viewModel.sendMessage()
+                        }
+                    }) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.title3)
+                            .foregroundColor(
+                                viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.areServicesHealthy()
+                                ? .secondary
+                                : .blue
+                            )
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(
+                        viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        viewModel.isProcessing ||
+                        !viewModel.areServicesHealthy()
+                    )
                 }
-                .buttonStyle(.borderless)
-                .disabled(
-                    viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    viewModel.isProcessing ||
-                    !viewModel.areServicesHealthy()
-                )
-            }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }

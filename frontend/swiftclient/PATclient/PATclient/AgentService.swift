@@ -14,6 +14,8 @@
 //
 
 import Foundation
+import SwiftUI
+import os.log
 
 class AgentService {
     static let shared = AgentService()
@@ -21,12 +23,122 @@ class AgentService {
     private let baseURL: String
     private let session: URLSession
     
-    private init(baseURL: String = "http://127.0.0.1:8002") {
+    private init(baseURL: String = Config.agentBaseURL) {
         self.baseURL = baseURL
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 120
         config.timeoutIntervalForResource = 300
         self.session = URLSession(configuration: config)
+    }
+    
+    // MARK: - Network Logging
+    private func logRequest(_ request: URLRequest) {
+        NetworkLogger.shared.logRequest(request)
+    }
+    
+    private func logResponse(_ response: URLResponse?, data: Data, error: Error?) {
+        NetworkLogger.shared.logResponse(response, data: data, error: error)
+    }
+    
+    // MARK: - Query Implementation with Logging
+    func query(text: String, webSearch: Bool, useMemory: Bool = true, userId: String = "default", stream: Bool = false) async throws -> QueryResponse {
+        var tools: [String] = []
+        if webSearch {
+            tools.append("web")
+        }
+        if useMemory {
+            tools.append("memory")
+        }
+        
+        let request = QueryRequest(query: text, user_id: userId, stream: stream, tools: tools)
+        
+        guard let url = URL(string: "\(baseURL)/query") else {
+            throw AgentError.invalidURL
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try JSONEncoder().encode(request)
+        
+        logRequest(urlRequest)
+        
+        let (data, response) = try await session.data(for: urlRequest)
+        
+        logResponse(response, data: data, error: nil)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AgentError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw AgentError.serverError(httpResponse.statusCode)
+        }
+        
+        let queryResponse = try JSONDecoder().decode(QueryResponse.self, from: data)
+        return queryResponse
+    }
+    
+    // MARK: - Health Check Implementation
+    func checkHealth() async throws -> HealthStatus {
+        guard let url = URL(string: "\(baseURL)/health") else {
+            throw AgentError.invalidURL
+        }
+        
+        let (data, response) = try await session.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw AgentError.invalidResponse
+        }
+        
+        return try JSONDecoder().decode(HealthStatus.self, from: data)
+    }
+    
+    // MARK: - Health Status Response
+    struct HealthStatus: Codable {
+        let status: String
+        let services: ServiceStatus
+        
+        struct ServiceStatus: Codable {
+            let database: String
+            let redis: String
+            let ingest: String
+            let llm_provider: String
+        }
+    }
+    
+    // MARK: - Query Response Model
+    struct QueryResponse: Codable {
+        let response: String
+        let sources: [Source]
+        let tools_used: [String]
+        let model_used: String
+        let processing_time: Double
+    }
+    
+    // MARK: - Error Handling
+    enum AgentError: Error, LocalizedError {
+        case invalidURL
+        case invalidResponse
+        case serverError(Int)
+        case decodingError
+        case networkError(Error)
+        
+        var errorDescription: String? {
+            switch self {
+            case .invalidURL:
+                return "Invalid URL"
+            case .invalidResponse:
+                return "Invalid response from server"
+            case .serverError(let code):
+                return "Server error: \(code)"
+            case .decodingError:
+                return "Failed to decode response"
+            case .networkError(let error):
+                return "Network error: \(error.localizedDescription)"
+            }
+        }
     }
     func checkAgentService() async -> Bool {
         guard let url = URL(string: "\(baseURL)/health") else { return false }

@@ -7,6 +7,7 @@
 
 import Foundation
 import os.log
+import SwiftUI
 
 class IngestService {
     static let shared = IngestService()
@@ -14,7 +15,7 @@ class IngestService {
     private let baseURL: String
     private let session: URLSession
     private let logger = SharedLogger.shared
-    private init(baseURL: String = "http://127.0.0.1:8001") {
+    private init(baseURL: String = Config.ingestBaseURL) {
             self.baseURL = baseURL
             let config = URLSessionConfiguration.default
             config.timeoutIntervalForRequest = 60

@@ -74,6 +74,15 @@ class WebSocketManager: NSObject, ObservableObject {
     func sendPing() {
         sendMessage("ping")
     }
+    
+    func disconnect() {
+        webSocketTask?.cancel(with: .normalClosure, reason: nil)
+        webSocketTask = nil
+        DispatchQueue.main.async {
+            self.isConnected = false
+            self.latestMessage = "Disconnected from PAT service"
+        }
+    }
 }
 
 extension WebSocketManager: URLSessionWebSocketDelegate {

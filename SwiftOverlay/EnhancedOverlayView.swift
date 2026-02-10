@@ -3,7 +3,7 @@ import AppKit
 
 struct EnhancedOverlayView: View {
     @EnvironmentObject var model: TeleprompterModel
-    @ObservedObject var webSocketManager = WebSocketManager()
+    @StateObject var webSocketManager = WebSocketManager()
     @State private var isDragging = false
     @State private var dragStartPos: CGPoint = .zero
     
@@ -139,10 +139,10 @@ struct EnhancedOverlayView: View {
         .background(Color.clear)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            webSocketManager.connect()
+            // WebSocketManager will auto-connect on init
         }
-        .onDisappear {
-            webSocketManager.disconnect()
+        .onReceive(model.$clickThrough) { newValue in
+            // Handle click-through changes
         }
     }
     
