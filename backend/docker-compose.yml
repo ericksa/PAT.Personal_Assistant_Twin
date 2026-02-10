@@ -89,7 +89,9 @@ services:
     ports: ["8001:8000"]
 
   agent-service:
-    build: ./services/agent
+    build:
+      context: ./services/agent
+      dockerfile: Dockerfile
     container_name: agent-service
     restart: unless-stopped
     environment:
@@ -97,42 +99,33 @@ services:
       REDIS_URL: redis://redis:6379/0
       LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      # ---- USE STRONGER MODELS FOR REASONING ----
-      OLLAMA_MODEL: deepseek-v3.1:671b-cloud  # Primary reasoning model
-      OLLAMA_FALLBACK_MODEL: glm-4.7:cloud    # Fallback if primary fails
-      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
-      TOP_K: 8                    # Get more context for complex reasoning
-      SCORE_THRESHOLD: 0.15       # Lower threshold for broader context
-      MAX_CONTEXT_LENGTH: 100000   # Allow longer reasoning chains
+      OLLAMA_MODEL: deepseek-v3.1:671b-cloud
+      OLLAMA_FALLBACK_MODEL: glm-4.7:cloud
+      OLLAMA_EMBEDDING_MODEL: bge-m3:latest
+      TOP_K: 8
+      SCORE_THRESHOLD: 0.15
+      MAX_CONTEXT_LENGTH: 100000
     depends_on:
       - postgres
       - redis
     volumes:
       - ./data/models:/data/models
       - ./data/documents:/data/documents
-    ports: ["8002:8000"]
+      - ./services/agent:/app
+    ports:
+      - "8002:8000"
 
-  brain_service:
-    build:
-     context: ./services/brain_service
-     dockerfile: Dockerfile
-    container_name: brain_service
+  teleprompter-app:
+    build: ./services/teleprompter
+    container_name: interview-teleprompter
     depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - OLLAMA_HOST=host.docker.internal:11434
-      - AGENT_URL=http://agent-service:8000
-    ports: ["8004:8000"]
-    extra_hosts:
-    - "host.docker.internal:host-gateway"
+      - agent-service
     volumes:
-    - ./data/brain:/app/brain_service:rw
+      - ./services/teleprompter:/app
+    ports:
+      - "8005:8000"
+    command: python app.py
 
-  # -----------------------------------------------------------------
-  # NEW – tiny proxy that forwards the “GenerateResume” tool
-  # -----------------------------------------------------------------
   tool-proxy:
     build:
       context: ./services/tool_proxy
@@ -145,19 +138,6 @@ services:
       - agent-service
     # expose only for debugging; the UI talks to it by service name
     ports: ["8003:8000"]
-
-  # -------------------------------------------------
-  # Ollama (LLM + embedding) – *shared* by ingest, agent & UI
-  # -------------------------------------------------
-#  ollama:
-#    image: ollama/ollama:latest
-#    container_name: ollama
-#    restart: unless-stopped
-#    tty: true
-#    volumes:
-#      - ollama:/root/.ollama
-#    ports: ["11435:11434"]
-
   # -------------------------------------------------
   # Open WebUI (the chat UI + RAG engine)
   # -------------------------------------------------
@@ -205,8 +185,8 @@ services:
       - minio
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    #volumes:
-      # - open-webui:/app/backend/data:rw       # UI data (knowledge bases, chats, etc.)
+    volumes:
+    - open-webui:/app/backend/data:rw       # UI data (knowledge bases, chats, etc.)
 
 
 volumes:
@@ -215,3 +195,4 @@ volumes:
   miniodata:
   n8ndata:
   open-webui:
+  openclaw_home:

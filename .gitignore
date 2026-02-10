@@ -19,3 +19,15 @@ DerivedData/
 # General
 *.swp
 *.tmp
+backend/.idea/runConfigurations/docker_compose_yml__Compose_Deployment.xml
+.idea/vcs.xml
+.idea/PAT.iml
+.idea/modules.xml
+.idea/intellij-javadocs-4.0.1.xml
+.idea/libraries/schema.xml
+.idea/libraries/schema1.xml
+.idea/misc.xml
+backend/.scripts/init.sql
+backend/cleaned_chat.txt
+backend/docker-compose.yml
+backend/raw_chat_export.txt

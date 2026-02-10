@@ -372,7 +372,15 @@ async def upload_document(file: UploadFile = File(...)):
 async def search_documents(request: SearchRequest):
     """Search documents using embeddings"""
     try:
-        # ... (code before this point is fine) ...
+        # Get embedding for query first
+        query_embedding = None
+        if embedding_model:
+            try:
+                embeddings = await embedding_model.embed([request.query])
+                if embeddings:
+                    query_embedding = embeddings[0]
+            except Exception as e:
+                logger.warning(f"Failed to generate query embedding: {e}")
 
         # Connect to database
         conn = psycopg2.connect(DATABASE_URL)
@@ -382,12 +390,12 @@ async def search_documents(request: SearchRequest):
         if query_embedding:
             try:
                 query_embedding_str = json.dumps(query_embedding)
+                # Try vector search
                 cur.execute("""
                     SELECT id, filename, content, metadata,
                            embedding <-> %s::vector as distance
                     FROM documents 
-                    -- FIX 1: Use vector_dims() to check for non-empty vectors
-                    WHERE vector_dims(embedding) > 0 
+                    WHERE embedding IS NOT NULL AND embedding != '[]' AND embedding != '"[]"'
                     ORDER BY distance ASC
                     LIMIT %s
                 """, (query_embedding_str, request.top_k))
@@ -405,17 +413,15 @@ async def search_documents(request: SearchRequest):
                     ))
 
                 if search_results:
-                    # Close connection only when returning successfully
                     cur.close()
                     conn.close()
                     return search_results
 
             except Exception as e:
                 logger.warning(f"Vector search failed, falling back to text search: {e}")
-                # FIX 2: Rollback the aborted transaction to allow further queries
                 conn.rollback()
 
-        # Text-based search fallback (this will now work)
+        # Text-based search fallback
         search_pattern = f"%{request.query}%"
         cur.execute("""
             SELECT id, filename, content, metadata
@@ -427,24 +433,21 @@ async def search_documents(request: SearchRequest):
 
         results = cur.fetchall()
 
-        # Always close your connection and cursor
-        cur.close()
-        conn.close()
-
         search_results = []
         for row in results:
             search_results.append(SearchResult(
                 document_id=str(row['id']),
                 content=row['content'][:500] + ("..." if len(row['content']) > 500 else ""),
                 filename=row['filename'],
-                similarity=0.5,  # Default similarity for text search
+                similarity=0.5,
                 metadata=row['metadata'] if row['metadata'] else {}
             ))
 
+        cur.close()
+        conn.close()
         return search_results
 
     except Exception as e:
-        # This outer catch will handle other errors, like connection failure
         logger.error(f"Search error: {e}")
         return []
 
