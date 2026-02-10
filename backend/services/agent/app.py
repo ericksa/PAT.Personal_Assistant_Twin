@@ -34,7 +34,7 @@ app.add_middleware(
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://llm:llm@postgres:5432/llm")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mlx")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "OLLAMA_BASE_URL: http://host.docker.internal:11434")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 INGEST_SERVICE_URL = "http://ingest-service:8000"
 TOP_K = int(os.getenv("TOP_K", "5"))
 SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.2"))
@@ -181,6 +181,7 @@ def build_context(local_results: List[Dict], web_results: List[WebSearchResult])
 
 async def get_ai_response(query: str, context: str) -> str:
     """Get AI response using configured LLM provider"""
+    logger.info(f"get_ai_response called with query: {query}")
     prompt = f"""You are PAT (Personal Assistant Twin). Use the following information to answer the user's question.
 
 {context}
@@ -194,24 +195,29 @@ Answer:"""
         # In a real implementation, you'd call your MLX service
         return f"This would be handled by your MLX service. Query: {query}"
     elif LLM_PROVIDER == "ollama":
+        logger.info("Entering Ollama processing block")
         try:
+            logger.info(f"Making request to Ollama at: {OLLAMA_BASE_URL}/api/generate")
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{OLLAMA_BASE_URL}/api/generate",
                     json={
-                        "model": "llama2",
+                        "model": "deepseek-v3.1:671b-cloud",
                         "prompt": prompt,
                         "stream": False
                     },
                     timeout=120
                 )
+                logger.info(f"Ollama response status: {response.status_code}")
                 if response.status_code == 200:
                     data = response.json()
+                    logger.info(f"Ollama response data: {data}")
                     return data.get("response", "No response from Ollama")
                 else:
+                    logger.error(f"Ollama error status: {response.status_code}, response text: {response.text}")
                     return "Unable to get response from Ollama"
         except Exception as e:
-            logger.error(f"Ollama error: {e}")
+            logger.error(f"Ollama error: {e}", exc_info=True)
             return "Error communicating with Ollama"
     else:
         return f"Unsupported LLM provider: {LLM_PROVIDER}"
