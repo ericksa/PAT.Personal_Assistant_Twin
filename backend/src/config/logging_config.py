@@ -1,17 +1,15 @@
-# src/config/logging_config.py - Structured Logging Configuration
 import logging
 import logging.config
-import sys
-from pathlib import Path
-from typing import Dict, Any
-from pythonjsonlogger import jsonlogger
 import os
+import json
+from pathlib import Path
+from typing import Dict, Any, Optional
 
 
 def setup_logging(
-    service_name: str = "job-search-service",
+    service_name: str = "pat-service",
     log_level: str = "INFO",
-    log_format: str = "json",
+    log_format: str = "text",
 ) -> None:
     """
     Configure structured logging for the application.
@@ -23,47 +21,33 @@ def setup_logging(
     """
 
     # Create logs directory if it doesn't exist
-    try:
-        # Try from config file location
-        script_dir = Path(__file__).parent.parent.parent / "logs"
-    except:
-        script_dir = Path("logs")
+    backend_dir = Path(__file__).parent.parent.parent
+    script_dir = backend_dir / "logs"
 
     if not script_dir.exists():
         script_dir.mkdir(exist_ok=True)
-
-    # JSON formatter for structured logging
-    json_formatter = jsonlogger.JsonFormatter(
-        "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d %(funcName)s",
-        timestamp=True,
-    )
-
-    # Text formatter for development
-    text_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
 
     # Handlers configuration
     handlers: Dict[str, Any] = {
         "console": {
             "()": "logging.StreamHandler",
             "stream": "ext://sys.stdout",
-            "formatter": "json" if log_format == "json" else "text",
+            "formatter": "text",
         },
         "file_info": {
             "()": "logging.handlers.RotatingFileHandler",
             "filename": str(script_dir / "info.log"),
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 5,  # Keep 5 backup files (30 days retention total)
-            "formatter": "json" if log_format == "json" else "text",
+            "maxBytes": 10485760,
+            "backupCount": 5,
+            "formatter": "text",
             "level": "INFO",
         },
         "file_error": {
             "()": "logging.handlers.RotatingFileHandler",
             "filename": str(script_dir / "error.log"),
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 5,  # Keep 5 backup files (30 days retention total)
-            "formatter": "json" if log_format == "json" else "text",
+            "maxBytes": 10485760,
+            "backupCount": 5,
+            "formatter": "text",
             "level": "ERROR",
         },
     }
@@ -99,10 +83,6 @@ def setup_logging(
 
     # Formatters
     formatters: Dict[str, Any] = {
-        "json": {
-            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-            "format": "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d %(funcName)s",
-        },
         "text": {
             "()": "logging.Formatter",
             "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -123,15 +103,7 @@ def setup_logging(
 
     # Log initialization
     logger = logging.getLogger(service_name)
-    logger.info(
-        f"Logging initialized for {service_name}",
-        extra={
-            "service": service_name,
-            "level": log_level,
-            "format": log_format,
-            "version": "1.0.0",
-        },
-    )
+    logger.info(f"Logging initialized for {service_name} (level={log_level})")
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -150,43 +122,24 @@ def get_logger(name: str) -> logging.Logger:
 class RequestLogger:
     """Helper class for logging HTTP requests with structured data"""
 
-    def __init__(self, logger: logging.Logger = None):
+    def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger("requests")
 
     def log_request(
         self, method: str, path: str, status_code: int, duration_ms: float, **kwargs
     ):
         """Log an HTTP request with structured data"""
-        self.logger.info(
-            "HTTP Request",
-            extra={
-                "event": "http_request",
-                "method": method,
-                "path": path,
-                "status_code": status_code,
-                "duration_ms": round(duration_ms, 2),
-                **kwargs,
-            },
-        )
+        self.logger.info(f"HTTP {method} {path} - {status_code} ({duration_ms:.0f}ms)")
 
     def log_error(self, method: str, path: str, error: str, **kwargs):
         """Log an HTTP error with structured data"""
-        self.logger.error(
-            "HTTP Error",
-            extra={
-                "event": "http_error",
-                "method": method,
-                "path": path,
-                "error": error,
-                **kwargs,
-            },
-        )
+        self.logger.error(f"HTTP Error: {method} {path} - {error}")
 
 
 class BusinessLogger:
     """Helper class for logging business events with structured data"""
 
-    def __init__(self, logger: logging.Logger = None):
+    def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger("business")
 
     def log_job_search(
