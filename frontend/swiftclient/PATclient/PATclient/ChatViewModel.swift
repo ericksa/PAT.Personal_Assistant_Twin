@@ -48,6 +48,27 @@ final class ChatViewModel: ObservableObject {
     @Published public var ollamaStatus: ServiceStatus = .disconnected
     @Published public var agentStatus: ServiceStatus = .disconnected
     @Published public var agentHealthDetails: HealthStatus? = nil
+    
+    // MARK: - Teleprompter & WebSocket Status
+    @Published public var isWebSocketConnected: Bool = false
+    @Published public var isListeningActive: Bool = false
+    @Published public var isTeleprompterActive: Bool = false
+    @Published public var teleprompterStatusText: String = "Stopped"
+    @Published public var listeningServiceStatusText: String = "Inactive"
+    @Published public var webSocketStatusText: String = "Disconnected"
+    
+    var listeningServiceStatusColor: Color {
+        isListeningActive ? .green : .gray
+    }
+    
+    var webSocketStatusColor: Color {
+        isWebSocketConnected ? .green : .orange
+    }
+    
+    var teleprompterStatusColor: Color {
+        isTeleprompterActive ? .green : .gray
+    }
+    
     @Published var currentSession: ChatSession?
     
     // MARK: - Dependencies
@@ -138,6 +159,110 @@ final class ChatViewModel: ObservableObject {
         }
         
         isProcessing = false
+    }
+    
+    // MARK: - Teleprompter & WebSocket Controls
+    
+    /// Toggle WebSocket connection for real-time text pushing
+    func toggleWebSocketConnection() {
+        if isWebSocketConnected {
+            disconnectWebSocket()
+        } else {
+            connectWebSocket()
+        }
+    }
+    
+    /// Connect to WebSocket server
+    func connectWebSocket() {
+        // For now, just update the state
+        // WebSocket client will be implemented separately
+        isWebSocketConnected = true
+        webSocketStatusText = "Connecting..."
+        
+        // Simulate connection process
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            self.webSocketStatusText = "Connected to localhost:8765"
+        }
+        
+        logger.general.info("WebSocket connection initiated")
+    }
+    
+    /// Disconnect from WebSocket server
+    func disconnectWebSocket() {
+        isWebSocketConnected = false
+        webSocketStatusText = "Disconnected"
+        logger.general.info("WebSocket connection terminated")
+    }
+    
+    /// Toggle listening service (microphone)
+    func toggleListeningService() {
+        if isListeningActive {
+            stopListeningService()
+        } else {
+            startListeningService()
+        }
+    }
+    
+    /// Start the Python listening service
+    func startListeningService() {
+        isListeningActive = true
+        listeningServiceStatusText = "Starting..."
+        
+        // Start listening service process
+        let task = Process()
+        task.launchPath = "/usr/bin/env"
+        task.arguments = ["python3", "/Users/adamerickson/Projects/PAT/backend/services/listening/live_interview_listener_fixed.py"]
+        
+        do {
+            task.launch()
+            listeningServiceStatusText = "Listening active"
+            logger.general.info("Listening service started")
+        } catch {
+            listeningServiceStatusText = "Error"
+            errorMessage = "Failed to start listening service: \(error.localizedDescription)"
+            isListeningActive = false
+            logger.general.error("Listening service failed to start: \(error)")
+        }
+    }
+    
+    /// Stop the listening service
+    func stopListeningService() {
+        isListeningActive = false
+        listeningServiceStatusText = "Inactive"
+        logger.general.info("Listening service stopped")
+    }
+    
+    /// Toggle teleprompter visibility
+    func toggleTeleprompter() {
+        isTeleprompterActive.toggle()
+        
+        if isTeleprompterActive {
+            teleprompterStatusText = "Running"
+            launchTeleprompterOverlay()
+        } else {
+            teleprompterStatusText = "Stopped"
+        }
+    }
+    
+    /// Launch the teleprompter overlay
+    func launchTeleprompterOverlay() {
+        let overlayURL = URL(fileURLWithPath: "/Users/adamerickson/Projects/PAT/frontend/swiftclient/SwiftOverlayExported/PATOverlay.app")
+        
+        if FileManager.default.fileExists(atPath: overlayURL.path) {
+            do {
+                _ = try NSWorkspace.shared.open(overlayURL)
+            } catch {
+                errorMessage = "Failed to launch teleprompter: \(error.localizedDescription)"
+                isTeleprompterActive = false
+                teleprompterStatusText = "Error"
+                logger.general.error("Teleprompter launch failed: \(error)")
+            }
+        } else {
+            errorMessage = "Teleprompter not found: \(overlayURL.path)"
+            isTeleprompterActive = false
+            teleprompterStatusText = "Not Found"
+            logger.general.error("Teleprompter app not found: \(overlayURL.path)")
+        }
     }
     
     /// Checks the Ollama service health asynchronously.

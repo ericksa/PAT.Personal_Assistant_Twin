@@ -53,8 +53,35 @@ struct ChatView: View {
             .navigationTitle(viewModel.currentSession?.title ?? "PAT")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingSettings = true }) {
-                        Image(systemName: "gearshape")
+                    HStack(spacing: 12) {
+                        // Microphone/Listening Service Status
+                        Button(action: { viewModel.toggleListeningService() }) {
+                            Image(systemName: viewModel.isListeningActive ? "mic.fill" : "mic.slash")
+                                .foregroundColor(viewModel.listeningServiceStatusColor)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(viewModel.listeningServiceStatusText)
+                        
+                        // WebSocket Connection Status
+                        Button(action: { viewModel.toggleWebSocketConnection() }) {
+                            Image(systemName: viewModel.isWebSocketConnected ? "network" : "network.slash")
+                                .foregroundColor(viewModel.webSocketStatusColor)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(viewModel.webSocketStatusText)
+                        
+                        // Teleprompter Status
+                        Button(action: { viewModel.toggleTeleprompter() }) {
+                            Image(systemName: viewModel.isTeleprompterActive ? "arrow.up.doc.fill" : "arrow.up.doc")
+                                .foregroundColor(viewModel.teleprompterStatusColor)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(viewModel.teleprompterStatusText)
+                        
+                        // Settings
+                        Button(action: { showingSettings = true }) {
+                            Image(systemName: "gearshape")
+                        }
                     }
                 }
             }

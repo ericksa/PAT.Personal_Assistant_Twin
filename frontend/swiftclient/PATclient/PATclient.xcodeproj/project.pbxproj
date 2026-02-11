@@ -37,7 +37,7 @@
 		E00145132F22A6000053AAD4 /* BackgroundAssets.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = BackgroundAssets.framework; path = System/Library/Frameworks/BackgroundAssets.framework; sourceTree = SDKROOT; };
 		E00145152F22A6290053AAD4 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		E00145172F22A6330053AAD4 /* InputMethodKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = InputMethodKit.framework; path = System/Library/Frameworks/InputMethodKit.framework; sourceTree = SDKROOT; };
-		E0F607092F22E29A00A771CF /* PATclient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = PATclient.app; path = /Users/adamerickson/Projects/PAT/frontend/swiftclient/PATclient/build/Debug/PATclient.app; sourceTree = "<absolute>"; };
+		E05803362F3CBA5300661B24 /* PATclient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PATclient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -77,6 +77,7 @@
 		E00144FD2F22A4080053AAD4 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				E05803362F3CBA5300661B24 /* PATclient.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -119,7 +120,7 @@
 			packageProductDependencies = (
 			);
 			productName = PATclient;
-			productReference = E0F607092F22E29A00A771CF /* PATclient.app */;
+			productReference = E05803362F3CBA5300661B24 /* PATclient.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

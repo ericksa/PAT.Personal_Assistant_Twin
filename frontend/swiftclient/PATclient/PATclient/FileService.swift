@@ -13,9 +13,9 @@
 //  Service for file operations and markdown export
 //
 
-import Foundation
-import AppKit
-internal import UniformTypeIdentifiers
+ import Foundation
+ import AppKit
+ import UniformTypeIdentifiers
 
 class FileService {
     static let shared = FileService()
@@ -52,17 +52,30 @@ class FileService {
             throw FileError.userCancelled
         }
         
-        let exportData = ChatExport(
-            title: sessionTitle,
-            exportedAt: Date(),
-            messages: messages,
-            settings: settings
-        )
+        let shouldStopAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
         
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(exportData)
+        // Create export dictionary directly
+        let exportData: [String: Any] = [
+            "title": sessionTitle,
+            "exportedAt": Date().timeIntervalSince1970,
+            "messages": messages.map { ["type": $0.type.rawValue, "content": $0.content, "timestamp": $0.timestamp.timeIntervalSince1970] },
+            "settings": [
+                "useWebSearch": settings.useWebSearch,
+                "useMemoryContext": settings.useMemoryContext,
+                "llmProvider": settings.llmProvider,
+                "selectedModel": settings.selectedModel,
+                "temperature": settings.temperature,
+                "maxTokens": settings.maxTokens,
+                "useDarkMode": settings.useDarkMode
+            ]
+        ]
+        
+        let data = try JSONSerialization.data(withJSONObject: exportData, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: url)
         
         return url
@@ -139,13 +152,6 @@ class FileService {
         
         return markdown
     }
-}
-
-struct ChatExport: Codable {
-    let title: String
-    let exportedAt: Date
-    let messages: [Message]
-    let settings: ChatSettings
 }
 
 enum FileError: Error, LocalizedError {
