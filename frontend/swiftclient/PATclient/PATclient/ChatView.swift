@@ -413,20 +413,85 @@ struct ChatView: View {
     }
     
     private func launchTeleprompter() {
-        // Try to launch from the exported location
-        let overlayURL = URL(fileURLWithPath: "/Users/adamerickson/Projects/PAT/frontend/swiftclient/SwiftOverlayExported/PATOverlay.app")
-        if FileManager.default.fileExists(atPath: overlayURL.path) {
+        // Use the standalone teleprompter app that handles overlay + listening service integration
+        let teleprompterURL = URL(fileURLWithPath: "../PATTeleprompter.app")
+        
+        if FileManager.default.fileExists(atPath: teleprompterURL.path) {
             do {
-                NSWorkspace.shared.open(overlayURL)
+                // Launch standalone teleprompter app
+                _ = try NSWorkspace.shared.openApplication(at: teleprompterURL, configuration: NSWorkspace.OpenConfiguration())
+                
+                viewModel.errorMessage = "🎬 PATTEL Teleprompter launched!"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    self.viewModel.errorMessage = nil
+                }
+                
                 return
             } catch {
                 viewModel.errorMessage = "Failed to launch teleprompter: \(error.localizedDescription)"
                 return
             }
+        } else {
+            // Fallback to old method if standalone app not found
+            startListeningService()
+            
+            let overlayURL = URL(fileURLWithPath: "/Users/adamerickson/Projects/PAT/frontend/swiftclient/SwiftOverlayExported/PATOverlay.app")
+            if FileManager.default.fileExists(atPath: overlayURL.path) {
+                do {
+                    let appConfiguration = NSWorkspace.OpenConfiguration()
+                    appConfiguration.activates = true
+                    
+                    _ = try NSWorkspace.shared.open(overlayURL, configuration: appConfiguration)
+                    
+                    viewModel.errorMessage = "🔄 Overlay launched successfully"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        self.viewModel.errorMessage = nil
+                    }
+                    
+                    return
+                } catch {
+                    viewModel.errorMessage = "Failed to launch teleprompter: \(error.localizedDescription)"
+                    return
+                }
+            }
+            
+            viewModel.errorMessage = "❌ Teleprompter components not found"
+        }
+    }
+    
+    private func startListeningService() {
+        // Use shell command to start the Python listening service
+        let scriptPath = "/Users/adamerickson/Projects/PAT/backend/services/listening/live_interview_listener.py"
+        
+        guard FileManager.default.fileExists(atPath: scriptPath) else {
+            viewModel.errorMessage = "Listening service not found at: \(scriptPath)"
+            return
         }
         
-        // Fallback message
-        viewModel.errorMessage = "Teleprompter overlay not found at: \(overlayURL.path)"
+        let task = Process()
+        task.launchPath = "/usr/bin/env"
+        task.arguments = ["python3", scriptPath]
+        
+        do {
+            task.launch()
+            DispatchQueue.main.async {
+                viewModel.errorMessage = "🔄 Listening service started"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    viewModel.errorMessage = nil
+                }
+            }
+        } catch {
+            viewModel.errorMessage = "❌ Failed to start listening service: \(error.localizedDescription)"
+        }
+    }
+    
+    private func stopListeningService() {
+        // Try to stop Python listening service gracefully
+        // For now, just log that we should stop it
+        viewModel.errorMessage = "Overlay closed - listening service should be stopped"
+        
+        // Note: In production, we should send a signal to the Python process
+        // or use a PID file to gracefully shut down
     }
 }
 

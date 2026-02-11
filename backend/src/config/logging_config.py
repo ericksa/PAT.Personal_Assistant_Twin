@@ -23,8 +23,14 @@ def setup_logging(
     """
 
     # Create logs directory if it doesn't exist
-    log_dir = Path("/app/logs")
-    log_dir.mkdir(exist_ok=True)
+    try:
+        # Try from config file location
+        script_dir = Path(__file__).parent.parent.parent / "logs"
+    except:
+        script_dir = Path("logs")
+
+    if not script_dir.exists():
+        script_dir.mkdir(exist_ok=True)
 
     # JSON formatter for structured logging
     json_formatter = jsonlogger.JsonFormatter(
@@ -46,7 +52,7 @@ def setup_logging(
         },
         "file_info": {
             "()": "logging.handlers.RotatingFileHandler",
-            "filename": str(log_dir / "info.log"),
+            "filename": str(script_dir / "info.log"),
             "maxBytes": 10485760,  # 10MB
             "backupCount": 5,  # Keep 5 backup files (30 days retention total)
             "formatter": "json" if log_format == "json" else "text",
@@ -54,7 +60,7 @@ def setup_logging(
         },
         "file_error": {
             "()": "logging.handlers.RotatingFileHandler",
-            "filename": str(log_dir / "error.log"),
+            "filename": str(script_dir / "error.log"),
             "maxBytes": 10485760,  # 10MB
             "backupCount": 5,  # Keep 5 backup files (30 days retention total)
             "formatter": "json" if log_format == "json" else "text",

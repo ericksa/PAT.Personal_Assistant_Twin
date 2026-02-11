@@ -37,3 +37,6 @@ backend/.claude/settings.local.json
 .idea/workspace.xml
 /.idea
 /backend/.claude
+.idea/misc.xml
+.idea/PAT.iml
+.idea/workspace.xml
