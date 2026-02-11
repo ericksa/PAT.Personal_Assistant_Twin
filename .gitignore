@@ -20,3 +20,4 @@ DerivedData/
 *.swp
 *.tmp
 /.idea
+/frontend/swiftclient/SwiftOverlay/.build
