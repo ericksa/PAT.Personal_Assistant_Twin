@@ -19,7 +19,7 @@ class CalendarRepository:
     DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
 
     # Default calendar name
-    DEFAULT_CALENDAR = "Adam"
+    DEFAULT_CALENDAR = "PAT-cal"
 
     async def create_event(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
         """
