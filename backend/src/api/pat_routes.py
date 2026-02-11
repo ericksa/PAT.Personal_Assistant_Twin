@@ -5,7 +5,7 @@ from datetime import datetime, date
 from uuid import UUID
 import logging
 
-from src.models.calendar import (
+from models.calendar import (
     CalendarEventCreate,
     CalendarEvent,
     Conflict,
@@ -13,8 +13,17 @@ from src.models.calendar import (
     ConflictType,
     ConflictSeverity,
 )
-from src.services.calendar_service import CalendarService
-from src.services.llm_service import LlamaLLMService
+from models.email import EmailCreate, EmailUpdate
+from models.task import TaskCreate, TaskUpdate
+from services.calendar_service import CalendarService
+from services.email_service import EmailService
+from services.task_service import TaskService
+from services.llm_service import LlamaLLMService
+from repositories.email_repo import EmailRepository
+from repositories.task_repo import TaskRepository
+from repositories.calendar_repo import CalendarRepository
+from utils.applescript.base_manager import AppleScriptManager
+from repositories.sql_helper import SQLHelper
 
 logger = logging.getLogger(__name__)
 
@@ -272,7 +281,301 @@ async def test_llm_connection():
         )
 
 
-# ===== AI-POWERED EMAIL ENDPOINTS =====
+# ===== EMAIL CRUD ENDPOINTS =====
+
+
+@router.get("/emails")
+async def list_emails(
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+    folder: Optional[str] = None,
+    thread_id: Optional[str] = None,
+    is_unread_only: bool = False,
+    is_flagged_only: bool = False,
+    classification: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List emails from the database with optional filters"""
+    db = SQLHelper()
+    repo = EmailRepository(db)
+
+    try:
+        emails = await repo.list_emails(
+            user_id,
+            folder,
+            thread_id,
+            is_unread_only,
+            is_flagged_only,
+            classification,
+            limit,
+            offset,
+        )
+        return {"status": "success", "emails": emails, "count": len(emails)}
+    except Exception as e:
+        logger.error(f"Failed to list emails: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list emails: {str(e)}",
+        )
+
+
+@router.get("/emails/{email_id}")
+async def get_email(email_id: str):
+    """Get a single email by ID"""
+    db = SQLHelper()
+    repo = EmailRepository(db)
+
+    try:
+        email = await repo.get_email(email_id)
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Email not found",
+            )
+        return {"status": "success", "email": email}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get email: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get email: {str(e)}",
+        )
+
+
+@router.put("/emails/{email_id}")
+async def update_email(email_id: str, email: EmailUpdate):
+    """Update an email"""
+    db = SQLHelper()
+    repo = EmailRepository(db)
+
+    try:
+        updated = await repo.update_email(email_id, email)
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Email not found",
+            )
+        return {"status": "success", "email": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update email: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update email: {str(e)}",
+        )
+
+
+@router.delete("/emails/{email_id}")
+async def delete_email(email_id: str):
+    """Delete an email"""
+    db = SQLHelper()
+    repo = EmailRepository(db)
+
+    try:
+        deleted = await repo.delete_email(email_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Email not found",
+            )
+        return {"status": "success", "message": "Email deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete email: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete email: {str(e)}",
+        )
+
+
+@router.post("/emails/sync")
+async def sync_emails_from_mailbox(
+    request_user_id: str = "00000000-0000-0000-0000-000000000001",
+    limit: int = 100,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """Sync emails from Apple Mail to the database"""
+    db = SQLHelper()
+    email_repo = EmailRepository(db)
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = EmailService(email_repo, task_repo, calendar_repo, llm, applescript)
+
+    try:
+        result = await service.sync_from_mailbox(request_user_id, limit)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to sync emails: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync emails: {str(e)}",
+        )
+
+
+@router.post("/emails/{email_id}/classify")
+async def classify_email_db(
+    email_id: str,
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """Classify an email from the database using AI"""
+    db = SQLHelper()
+    email_repo = EmailRepository(db)
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = EmailService(email_repo, task_repo, calendar_repo, llm, applescript)
+
+    try:
+        classification = await service.classify_email(email_id, user_id)
+        return {"status": "success", "classification": classification}
+    except Exception as e:
+        logger.error(f"Failed to classify email: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to classify email: {str(e)}",
+        )
+
+
+@router.post("/emails/{email_id}/summarize")
+async def summarize_email_db(
+    email_id: str,
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """Summarize an email from the database using AI"""
+    db = SQLHelper()
+    email_repo = EmailRepository(db)
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = EmailService(email_repo, task_repo, calendar_repo, llm, applescript)
+
+    try:
+        summary = await service.summarize_email(email_id, user_id)
+        return {"status": "success", "summary": summary}
+    except Exception as e:
+        logger.error(f"Failed to summarize email: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to summarize email: {str(e)}",
+        )
+
+
+@router.post("/emails/{email_id}/draft-reply")
+async def draft_reply_db(
+    email_id: str,
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+    tone: str = "professional",
+):
+    """Draft a reply to an email from the database using AI"""
+    db = SQLHelper()
+    email_repo = EmailRepository(db)
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = EmailService(email_repo, task_repo, calendar_repo, llm, applescript)
+
+    try:
+        reply = await service.draft_reply(email_id, user_id, tone)
+        return {"status": "success", "draft": reply}
+    except Exception as e:
+        logger.error(f"Failed to draft reply: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to draft reply: {str(e)}",
+        )
+
+
+@router.post("/emails/{email_id}/extract-tasks")
+async def extract_tasks_db(
+    email_id: str,
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """Extract tasks from an email in the database using AI"""
+    db = SQLHelper()
+    email_repo = EmailRepository(db)
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = EmailService(email_repo, task_repo, calendar_repo, llm, applescript)
+
+    try:
+        tasks = await service.extract_tasks(email_id, user_id)
+        return {"status": "success", "tasks": tasks, "count": len(tasks)}
+    except Exception as e:
+        logger.error(f"Failed to extract tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract tasks: {str(e)}",
+        )
+
+
+@router.post("/emails/{email_id}/extract-meetings")
+async def extract_meetings_db(
+    email_id: str,
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """Extract meetings from an email in the database using AI"""
+    db = SQLHelper()
+    email_repo = EmailRepository(db)
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = EmailService(email_repo, task_repo, calendar_repo, llm, applescript)
+
+    try:
+        meetings = await service.extract_meetings(email_id, user_id)
+        return {"status": "success", "meetings": meetings, "count": len(meetings)}
+    except Exception as e:
+        logger.error(f"Failed to extract meetings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract meetings: {str(e)}",
+        )
+
+
+@router.post("/emails/batch-classify")
+async def batch_classify_emails(
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+    limit: int = 20,
+):
+    """Batch classify recent unclassified emails"""
+    db = SQLHelper()
+    email_repo = EmailRepository(db)
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = EmailService(email_repo, task_repo, calendar_repo, llm, applescript)
+
+    try:
+        results = await service.batch_classify_recent(user_id, limit)
+        return {"status": "success", **results}
+    except Exception as e:
+        logger.error(f"Batch classify failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Batch classify failed: {str(e)}",
+        )
+
+
+# ===== AI-POWERED EMAIL ENDPOINTS (Text-based) =====
 
 
 @router.post("/emails/classify")
@@ -374,6 +677,305 @@ async def extract_meeting_details(text: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Meeting extraction failed: {str(e)}",
+        )
+
+
+# ===== TASK CRUD ENDPOINTS =====
+
+
+@router.get("/tasks")
+async def list_tasks(
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    tag: Optional[str] = None,
+    is_due_soon: bool = False,
+    is_overdue: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List tasks from the database with optional filters"""
+    db = SQLHelper()
+    repo = TaskRepository(db)
+
+    try:
+        tasks = await repo.list_tasks(
+            user_id, status, priority, tag, is_due_soon, is_overdue, limit, offset
+        )
+        return {"status": "success", "tasks": tasks, "count": len(tasks)}
+    except Exception as e:
+        logger.error(f"Failed to list tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list tasks: {str(e)}",
+        )
+
+
+@router.get("/tasks/{task_id}")
+async def get_task(task_id: str):
+    """Get a single task by ID"""
+    db = SQLHelper()
+    repo = TaskRepository(db)
+
+    try:
+        task = await repo.get_task(task_id)
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found",
+            )
+        return {"status": "success", "task": task}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get task: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get task: {str(e)}",
+        )
+
+
+@router.post("/tasks")
+async def create_task(
+    task: TaskCreate,
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """Create a new task"""
+    db = SQLHelper()
+    repo = TaskRepository(db)
+
+    task.user_id = task.user_id or user_id
+
+    try:
+        created = await repo.create_task(task)
+        return {"status": "success", "task": created}
+    except Exception as e:
+        logger.error(f"Failed to create task: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create task: {str(e)}",
+        )
+
+
+@router.put("/tasks/{task_id}")
+async def update_task(task_id: str, task: TaskUpdate):
+    """Update a task"""
+    db = SQLHelper()
+    repo = TaskRepository(db)
+
+    try:
+        updated = await repo.update_task(task_id, task)
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found",
+            )
+        return {"status": "success", "task": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update task: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update task: {str(e)}",
+        )
+
+
+@router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str):
+    """Delete a task"""
+    db = SQLHelper()
+    repo = TaskRepository(db)
+
+    try:
+        deleted = await repo.delete_task(task_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found",
+            )
+        return {"status": "success", "message": "Task deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete task: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete task: {str(e)}",
+        )
+
+
+@router.post("/tasks/sync")
+async def sync_tasks_from_reminders(
+    request_user_id: str = "00000000-0000-0000-0000-000000000001",
+    limit: int = 100,
+):
+    """Sync tasks from Apple Reminders to the database"""
+    db = SQLHelper()
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = TaskService(task_repo, calendar_repo, llm, applescript)
+
+    try:
+        result = await service.sync_from_reminders(request_user_id, limit)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to sync tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync tasks: {str(e)}",
+        )
+
+
+@router.post("/tasks/suggest-priorities")
+async def suggest_task_priorities(
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """AI-based task priority suggestions"""
+    db = SQLHelper()
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = TaskService(task_repo, calendar_repo, llm, applescript)
+
+    try:
+        suggestions = await service.suggest_priorities(user_id)
+        return {"status": "success", "suggestions": suggestions}
+    except Exception as e:
+        logger.error(f"Failed to suggest priorities: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to suggest priorities: {str(e)}",
+        )
+
+
+@router.post("/tasks/{task_id}/suggest-time")
+async def suggest_task_time(
+    task_id: str,
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """Suggest optimal schedule time for a task"""
+    db = SQLHelper()
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = TaskService(task_repo, calendar_repo, llm, applescript)
+
+    try:
+        suggestion = await service.suggest_schedule_time(task_id, user_id)
+        return {"status": "success", "suggestion": suggestion}
+    except Exception as e:
+        logger.error(f"Failed to suggest time: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to suggest time: {str(e)}",
+        )
+
+
+@router.get("/tasks/focus")
+async def get_focus_tasks(
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+    limit: int = 5,
+):
+    """Get top focus tasks for current session"""
+    db = SQLHelper()
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = TaskService(task_repo, calendar_repo, llm, applescript)
+
+    try:
+        tasks = await service.get_focus_tasks(user_id, limit)
+        return {"status": "success", "tasks": tasks}
+    except Exception as e:
+        logger.error(f"Failed to get focus tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get focus tasks: {str(e)}",
+        )
+
+
+@router.post("/tasks/{task_id}/complete")
+async def complete_task(
+    task_id: str,
+    notes: Optional[str] = None,
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """Mark a task as completed"""
+    db = SQLHelper()
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = TaskService(task_repo, calendar_repo, llm, applescript)
+
+    try:
+        result = await service.complete_task(task_id, user_id, notes)
+        return {"status": "success", "result": result}
+    except Exception as e:
+        logger.error(f"Failed to complete task: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to complete task: {str(e)}",
+        )
+
+
+@router.get("/tasks/completion-suggestions")
+async def task_completion_suggestions(
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """AI-based suggestions for task completion strategies"""
+    db = SQLHelper()
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = TaskService(task_repo, calendar_repo, llm, applescript)
+
+    try:
+        suggestions = await service.smart_task_completion_suggestions(user_id)
+        return {"status": "success", "suggestions": suggestions}
+    except Exception as e:
+        logger.error(f"Failed to get completion suggestions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get completion suggestions: {str(e)}",
+        )
+
+
+@router.post("/tasks/batch-create")
+async def batch_create_tasks(
+    task_descriptions: List[str],
+    user_id: str = "00000000-0000-0000-0000-000000000001",
+):
+    """Batch create tasks from descriptions with AI parsing"""
+    db = SQLHelper()
+    task_repo = TaskRepository(db)
+    calendar_repo = CalendarRepository(db)
+    llm = LlamaLLMService()
+    applescript = AppleScriptManager()
+
+    service = TaskService(task_repo, calendar_repo, llm, applescript)
+
+    try:
+        tasks = await service.batch_create_tasks(user_id, task_descriptions)
+        return {"status": "success", "tasks": tasks, "count": len(tasks)}
+    except Exception as e:
+        logger.error(f"Batch create tasks failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Batch create tasks failed: {str(e)}",
         )
 
 
