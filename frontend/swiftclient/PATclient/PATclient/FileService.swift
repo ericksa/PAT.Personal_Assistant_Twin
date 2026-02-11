@@ -96,7 +96,7 @@ class FileService {
     // MARK: - Upload Method (MainActor required for NSOpenPanel)
     
     @MainActor
-    func selectFileToUpload() throws -> URL {
+    func selectFileToUpload() async throws -> URL {
         let openPanel = NSOpenPanel()
         openPanel.allowedContentTypes = [.plainText, .utf8PlainText, .utf16PlainText, .text, .pdf]
         openPanel.allowsMultipleSelection = false

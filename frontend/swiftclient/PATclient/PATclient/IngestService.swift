@@ -132,7 +132,7 @@ class IngestService {
             throw IngestError.invalidURL
         }
         
-        var body: [String: Any] = [
+        let body: [String: Any] = [
             "filename": filename,
             "content": content,
             "metadata": metadata ?? [

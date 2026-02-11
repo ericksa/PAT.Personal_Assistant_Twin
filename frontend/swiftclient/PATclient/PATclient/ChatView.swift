@@ -57,8 +57,13 @@ struct ChatView: View {
             .navigationTitle(viewModel.currentSession?.title ?? "PAT")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingSettings = true }) {
-                        Image(systemName: "gearshape")
+                    HStack(spacing: 12) {
+                        Button(action: { launchTeleprompter() }) {
+                            Image(systemName: "ear")
+                        }
+                        Button(action: { showingSettings = true }) {
+                            Image(systemName: "gearshape")
+                        }
                     }
                 }
             }
@@ -405,6 +410,23 @@ struct ChatView: View {
                 self.viewModel.errorMessage = "Failed to load saved sessions"
             }
         }
+    }
+    
+    private func launchTeleprompter() {
+        // Try to launch from the exported location
+        let overlayURL = URL(fileURLWithPath: "/Users/adamerickson/Projects/PAT/frontend/swiftclient/SwiftOverlayExported/PATOverlay.app")
+        if FileManager.default.fileExists(atPath: overlayURL.path) {
+            do {
+                NSWorkspace.shared.open(overlayURL)
+                return
+            } catch {
+                viewModel.errorMessage = "Failed to launch teleprompter: \(error.localizedDescription)"
+                return
+            }
+        }
+        
+        // Fallback message
+        viewModel.errorMessage = "Teleprompter overlay not found at: \(overlayURL.path)"
     }
 }
 

@@ -30,3 +30,6 @@ backend/.claude/settings.local.json
 backend/.claude/settings.local.json
 .idea/workspace.xml
 backend/.claude/settings.local.json
+/frontend/swiftclient/PATclient/PATclient/SwiftOverlay/.build
+/frontend/swiftclient/SwiftOverlay/.build/arm64-apple-macosx/debug
+/frontend/swiftclient/SwiftOverlay/.build

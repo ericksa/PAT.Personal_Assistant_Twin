@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum MessageType: Hashable {
+enum MessageType: String, Codable, Hashable {
     case user
     case assistant
     case system
