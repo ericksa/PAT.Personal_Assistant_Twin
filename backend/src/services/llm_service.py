@@ -3,7 +3,7 @@ import httpx
 import asyncio
 
 
-class LLMService:
+class LlamaLLMService:
     """Service for interacting with Llama 3.2 3B via Ollama"""
 
     def __init__(
@@ -197,3 +197,6 @@ class LLMService:
 
         except Exception:
             return False
+
+
+LLMService = LlamaLLMService

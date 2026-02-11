@@ -1,13 +1,13 @@
 import json
 from typing import List, Optional
 from datetime import datetime
-from src.repositories.email_repo import EmailRepository
-from src.repositories.task_repo import TaskRepository
-from src.repositories.calendar_repo import CalendarRepository
-from src.models.email import EmailCreate, EmailUpdate
-from src.models.task import TaskCreate
-from src.services.llm_service import LLMService
-from src.utils.applescript.base_manager import AppleScriptManager
+from repositories.email_repo import EmailRepository
+from repositories.task_repo import TaskRepository
+from repositories.calendar_repo import CalendarRepository
+from models.email import EmailCreate, EmailUpdate
+from models.task import TaskCreate
+from services.llm_service import LLMService
+from utils.applescript.base_manager import AppleScriptManager
 
 
 class EmailService:
@@ -210,7 +210,7 @@ class EmailService:
 
         created_events = []
         for meeting in meetings:
-            from src.models.calendar import CalendarEventCreate
+            from models.calendar import CalendarEventCreate
 
             event_create = CalendarEventCreate(
                 user_id=user_id,

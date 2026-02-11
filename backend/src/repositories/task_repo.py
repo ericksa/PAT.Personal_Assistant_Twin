@@ -1,7 +1,7 @@
 from typing import List, Optional
 from datetime import datetime
-from src.repositories.base import BaseRepository
-from src.models.task import TaskCreate, TaskUpdate
+from repositories.base import BaseRepository
+from models.task import TaskCreate, TaskUpdate
 
 
 class TaskRepository(BaseRepository):
@@ -106,7 +106,7 @@ class TaskRepository(BaseRepository):
                 created_at DESC
             LIMIT ${param_idx} OFFSET ${param_idx + 1}
         """
-        params.extend([limit, offset])
+        params.extend([str(limit), str(offset)])
 
         return await self.fetch(query, *params)
 

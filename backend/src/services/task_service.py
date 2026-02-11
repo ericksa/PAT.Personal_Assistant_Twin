@@ -1,11 +1,11 @@
 from typing import List, Optional
 from datetime import datetime
-from src.repositories.task_repo import TaskRepository
-from src.repositories.calendar_repo import CalendarRepository
-from src.models.task import TaskCreate, TaskUpdate
-from src.models.calendar import CalendarEventCreate
-from src.services.llm_service import LLMService
-from src.utils.applescript.base_manager import AppleScriptManager
+from repositories.task_repo import TaskRepository
+from repositories.calendar_repo import CalendarRepository
+from models.task import TaskCreate, TaskUpdate
+from models.calendar import CalendarEventCreate
+from services.llm_service import LLMService
+from utils.applescript.base_manager import AppleScriptManager
 
 
 class TaskService:
@@ -170,7 +170,7 @@ class TaskService:
         if schedule["suggested_times"]:
             suggested_time = schedule["suggested_times"][0]
 
-            from src.models.calendar import CalendarEventCreate
+            from models.calendar import CalendarEventCreate
 
             event_create = CalendarEventCreate(
                 user_id=user_id,
