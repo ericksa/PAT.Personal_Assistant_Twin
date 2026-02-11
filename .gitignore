@@ -32,3 +32,4 @@ backend/cleaned_chat.txt
 backend/docker-compose.yml
 backend/raw_chat_export.txt
 /frontend/swiftclient/SwiftOverlay/.build
+.idea/inspectionProfiles/Project_Default.xml
