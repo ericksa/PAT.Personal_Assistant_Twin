@@ -1,10 +1,9 @@
 live_interview_listener.py
 
   #!/usr/bin/env python3
-  """
-  Live Interview Listener
-  Captures system audio/microphone, transcribes speech, and sends to PAT agent service
-  """
+ # Live Interview Listener
+ # Captures system audio/microphone, transcribes speech, and sends to PAT agent service
+ 
 
   import soundcard as sc
   import numpy as np
