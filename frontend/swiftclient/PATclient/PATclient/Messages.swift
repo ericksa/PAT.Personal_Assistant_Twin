@@ -70,6 +70,7 @@ struct Message: Identifiable, Codable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
+        
         let typeString = try container.decode(String.self, forKey: .type)
         switch typeString {
         case "user": type = .user
@@ -77,6 +78,7 @@ struct Message: Identifiable, Codable, Hashable {
         case "system": type = .system
         default: type = .assistant
         }
+        
         content = try container.decode(String.self, forKey: .content)
         timestamp = try container.decode(Date.self, forKey: .timestamp)
         sources = try container.decodeIfPresent([Source].self, forKey: .sources) ?? []

@@ -7,24 +7,51 @@
 
 import Foundation
 
-struct ChatSession: Identifiable, Codable, Hashable {
-    let id: UUID
-    var title: String
-    var messages: [Message]
-    let createdAt: Date
-    var updatedAt: Date
-    var settings: ChatSettings
-    
-    init(id: UUID = UUID(), title: String, messages: [Message] = [], createdAt: Date = Date(), updatedAt: Date = Date(), settings: ChatSettings = ChatSettings()) {
-        self.id = id
-        self.title = title
-        self.messages = messages
-        self.createdAt = createdAt
-        self.updatedAt = updatedAt
-        self.settings = settings
-    }
-    
-    func hash(into hasher: inout Hasher) {
+ struct ChatSession: Identifiable, Codable, Hashable {
+     let id: UUID
+     var title: String
+     var messages: [Message]
+     let createdAt: Date
+     var updatedAt: Date
+     var settings: ChatSettings
+     
+     init(id: UUID = UUID(), title: String, messages: [Message] = [], createdAt: Date = Date(), updatedAt: Date = Date(), settings: ChatSettings = ChatSettings()) {
+         self.id = id
+         self.title = title
+         self.messages = messages
+         self.createdAt = createdAt
+         self.updatedAt = updatedAt
+         self.settings = settings
+     }
+     
+     // Custom CodingKeys for ChatSession
+     enum CodingKeys: String, CodingKey {
+         case id, title, messages, createdAt, updatedAt, settings
+     }
+     
+     // Custom decoding for backward compatibility
+     init(from decoder: Decoder) throws {
+         let container = try decoder.container(keyedBy: CodingKeys.self)
+         id = try container.decode(UUID.self, forKey: .id)
+         title = try container.decode(String.self, forKey: .title)
+         messages = try container.decode([Messages.Message].self, forKey: .messages)
+         createdAt = try container.decode(Date.self, forKey: .createdAt)
+         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+         settings = try container.decode(ChatSettings.self, forKey: .settings)
+     }
+     
+     // Custom encoding
+     func encode(to encoder: Encoder) throws {
+         var container = encoder.container(keyedBy: CodingKeys.self)
+         try container.encode(id, forKey: .id)
+         try container.encode(title, forKey: .title)
+         try container.encode(messages, forKey: .messages)
+         try container.encode(createdAt, forKey: .createdAt)
+         try container.encode(updatedAt, forKey: .updatedAt)
+         try container.encode(settings, forKey: .settings)
+     }
+     
+     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(title)
         hasher.combine(messages)
