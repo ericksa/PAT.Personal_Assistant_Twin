@@ -1,0 +1,112 @@
+#!/bin/bash
+# PATTEL - PAT Teleprompter Launcher
+# This script integrates the existing Swift overlay with the Python listening service
+
+# Set working directory
+cd "$(dirname "$0")"
+
+echo "==============================================="
+echo "🚀 PAT Teleprompter (PATTEL) starting..."
+echo "Working directory: $(pwd)"
+echo "==============================================="
+
+# Function to cleanup processes
+cleanup() {
+    echo "🛑 Cleaning up processes..."
+    # Kill any running listening services
+    pkill -f "python.*live_interview_listener" 2>/dev/null
+    # Kill the overlay app
+    pkill -f "PATOverlay" 2>/dev/null
+}
+
+# Trap CTRL+C to cleanup gracefully
+trap cleanup SIGINT
+
+# Check if Python listening service directory exists
+LISTENING_DIR="/Users/adamerickson/Projects/PAT/backend/services/listening"
+if [ ! -d "$LISTENING_DIR" ]; then
+    echo "❌ Listening service not found at: $LISTENING_DIR"
+    exit 1
+fi
+
+# Check if overlay exists
+OVERLAY_PATH="/Users/adamerickson/Projects/PAT/frontend/swiftclient/SwiftOverlayExported/PATOverlay.app"
+if [ ! -d "$OVERLAY_PATH" ]; then
+    echo "❌ Overlay not found at: $OVERLAY_PATH"
+    exit 1
+fi
+
+echo "✅ All components found"
+echo "   • Listening Service: $LISTENING_DIR"
+echo "   • Overlay: $OVERLAY_PATH"
+echo ""
+
+# Start Swift overlay FIRST
+echo "🎬 Launching PAT Overlay..."
+open "$OVERLAY_PATH"
+echo "   • Overlay launched successfully"
+
+# Wait a moment for overlay to fully launch
+sleep 3
+
+# Start Python listening service in background
+echo "🎙️  Starting Interview Listening Service..."
+cd "$LISTENING_DIR"
+
+# Check if Python requirements are installed
+if python3 -c "import faster_whisper" 2>/dev/null; then
+    echo "   • Whisper model available"
+else
+    echo "⚠️  Warning: faster_whisper not available"
+fi
+
+# Start the listening service
+python3 live_interview_listener.py &
+LISTENER_PID=$!
+
+# Give it a moment to start
+sleep 2
+
+# Check if listening service started successfully
+if ps -p $LISTENER_PID > /dev/null; then
+    echo "✅ Listening service started (PID: $LISTENER_PID)"
+else
+    echo "❌ Listening service failed to start"
+    cleanup
+    exit 1
+fi
+
+echo ""
+echo "✅ PAT Teleprompter is now running!"
+echo "   • Overlay: PATOverlay.app"
+echo "   • Listening Service: PID $LISTENER_PID"
+echo ""
+echo "💡 Close the overlay window to stop all components"
+echo "==============================================="
+echo "Press Ctrl+C to stop"
+echo ""
+
+# Monitor status
+while true; do
+    # Check if overlay is still running using AppleScript
+    OVERLAY_RUNNING=$(osascript -e 'tell application "System Events" to (name of processes) contains "PATOverlay"' 2>/dev/null || echo "false")
+    
+    # Check if listening service is still running
+    if ! ps -p $LISTENER_PID > /dev/null; then
+        echo "🔚 Listening service stopped"
+        break
+    fi
+    
+    if [ "$OVERLAY_RUNNING" = "false" ]; then
+        echo "🔚 Overlay closed"
+        break
+    fi
+    
+    sleep 2
+done
+
+echo ""
+echo "🛑 Stopping PAT Teleprompter..."
+cleanup
+sleep 1
+echo "👋 PAT Teleprompter has stopped"

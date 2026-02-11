@@ -13,9 +13,11 @@ struct ChatView: View {
     @State private var showingSettings = false
     @State private var sessions: [ChatSession] = []
     @FocusState private var isInputFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
     
+    private var isDarkMode: Bool { colorScheme == .dark }
     
-    var body: some View {           // ← Add this
+    var body: some View {
         NavigationSplitView {
             SessionListView(
                 sessions: $sessions,
@@ -41,29 +43,41 @@ struct ChatView: View {
                     serviceStatusBanner
                 }
 
-                headerView
                 messagesView
-
+                
                 if let errorMessage = viewModel.errorMessage {
                     errorBanner(message: errorMessage)
                 }
+                
+                Divider()
 
                 inputView
             }
+            .background(Color(nsColor: isDarkMode ? .black : .white))
             .navigationTitle(viewModel.currentSession?.title ?? "PAT")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingSettings = true }) {
-                        Image(systemName: "gearshape")
+                    HStack(spacing: 12) {
+                        Button(action: { launchTeleprompter() }) {
+                            Image(systemName: "ear")
+                        }
+                        Button(action: { showingSettings = true }) {
+                            Image(systemName: "gearshape")
+                        }
                     }
                 }
             }
-        }
-        .task {
-            await viewModel.initialHealthCheck()
-            loadSessions()
+            .task {
+                await viewModel.initialHealthCheck()
+                await loadSessionsAsync()
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView(viewModel: viewModel)
+                    .presentationDetents([.medium])
+            }
         }
     }
+    
     @ViewBuilder
     private var serviceStatusBanner: some View {
         VStack(spacing: 0) {
@@ -86,8 +100,6 @@ struct ChatView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Services Required")
                         .font(.headline)
-                    
-          
                     
                     if let agentDetails = viewModel.agentHealthDetails {
                         Divider()
@@ -125,50 +137,16 @@ struct ChatView: View {
         }
     }
     
-   
-    
-    @ViewBuilder
-    private var headerView: some View {
-        HStack {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(viewModel.areServicesHealthy() ? .green : .red)
-                    .frame(width: 8, height: 8)
-                Text(viewModel.agentHealthDetails?.services.llm_provider ?? "Unknown")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 12) {
-                Button(action: { viewModel.exportAsMarkdown() }) {
-                    Label("Markdown", systemImage: "doc.text")
-                }
-                .buttonStyle(.borderless)
-                
-                Button(action: { Task { await viewModel.uploadDocument() } }) {
-                    Label("Upload", systemImage: "square.and.arrow.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(viewModel.isProcessing || viewModel.ingestStatus != .healthy)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
-    }
-    
     @ViewBuilder
     private var messagesView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 0) {
+                LazyVStack(spacing: 16) {
                     if viewModel.messages.isEmpty {
                         emptyStateView
                     } else {
                         ForEach(viewModel.messages) { message in
-                            MessageRow(message: message)
+                            MessageRow(message: message, viewModel: viewModel)
                             
                             if message.id != viewModel.messages.last?.id {
                                 Divider()
@@ -187,6 +165,7 @@ struct ChatView: View {
                         }
                     }
                 }
+                .padding(.vertical, 16)
                 .onChange(of: viewModel.messages.count) { _, _ in
                     if let lastMessage = viewModel.messages.last {
                         withAnimation {
@@ -255,7 +234,7 @@ struct ChatView: View {
                             
                             stepInstruction(
                                 "Download a model",
-                                command: "ollama pull llama2"
+                                command: "ollama pull llama3:8b"
                             )
                             
                             stepInstruction(
@@ -327,9 +306,11 @@ struct ChatView: View {
             HStack(spacing: 20) {
                 Toggle("Web Search", isOn: $viewModel.useWebSearch)
                     .toggleStyle(.switch)
+                    .font(.caption)
                 
                 Toggle("Memory Context", isOn: $viewModel.useMemoryContext)
                     .toggleStyle(.switch)
+                    .font(.caption)
                 
                 Spacer()
                 
@@ -347,41 +328,66 @@ struct ChatView: View {
             
             Divider()
             
-            HStack(spacing: 12) {
-                TextField("Type your message...", text: $viewModel.inputText, axis: .vertical)
-                    .focused($isInputFocused)
-                    .font(.body)
-                    .lineLimit(1...6) // Allow 1-6 lines
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(nsColor: .textBackgroundColor))
-                    )
-                
-                Button(action: {
-                    Task {
-                        await viewModel.sendMessage()
+                HStack(spacing: 12) {
+                Menu {
+                    Button(action: {
+                        Task { await viewModel.uploadDocument() }
+                    }) {
+                        Label("Upload Document", systemImage: "doc")
                     }
-                }) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(
-                            viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.areServicesHealthy()
-                            ? .secondary
-                            : .blue
-                        )
+                    
+                    Divider()
+                    
+                    Button(action: {
+                        Task { await viewModel.uploadResume() }
+                    }) {
+                        Label("Upload Resume", systemImage: "person.crop.rectangle")
+                    }
+                } label: {
+                    Image(systemName: "paperclip")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
                 }
                 .buttonStyle(.borderless)
-                .disabled(
-                    viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    viewModel.isProcessing ||
-                    !viewModel.areServicesHealthy()
-                )
-            }
+                    
+                    TextField("Type your message...", text: $viewModel.inputText, axis: .vertical)
+                        .focused($isInputFocused)
+                        .font(.body)
+                        .lineLimit(1...6) // Allow 1-6 lines
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(nsColor: .textBackgroundColor))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    
+                    Button(action: {
+                        Task {
+                            await viewModel.sendMessage()
+                        }
+                    }) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.title3)
+                            .foregroundColor(
+                                viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.areServicesHealthy()
+                                ? .secondary
+                                : .blue
+                            )
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(
+                        viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        viewModel.isProcessing ||
+                        !viewModel.areServicesHealthy()
+                    )
+                }
             .padding(.horizontal, 16)
-            .padding(.bottom, 16)
+            .padding(.vertical, 12)
         }
         .background(Color(nsColor: .controlBackgroundColor))
     }
@@ -394,9 +400,103 @@ struct ChatView: View {
             viewModel.errorMessage = "Failed to load saved sessions"
         }
     }
+    
+    private func loadSessionsAsync() async {
+        DispatchQueue.main.async {
+            do {
+                self.sessions = try SessionService.shared.loadAllSessions()
+            } catch {
+                print("Failed to load sessions: \(error)")
+                self.viewModel.errorMessage = "Failed to load saved sessions"
+            }
+        }
+    }
+    
+    private func launchTeleprompter() {
+        // Use the standalone teleprompter app that handles overlay + listening service integration
+        let teleprompterURL = URL(fileURLWithPath: "../PATTeleprompter.app")
+        
+        if FileManager.default.fileExists(atPath: teleprompterURL.path) {
+            do {
+                // Launch standalone teleprompter app
+                _ = try NSWorkspace.shared.openApplication(at: teleprompterURL, configuration: NSWorkspace.OpenConfiguration())
+                
+                viewModel.errorMessage = "🎬 PATTEL Teleprompter launched!"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    self.viewModel.errorMessage = nil
+                }
+                
+                return
+            } catch {
+                viewModel.errorMessage = "Failed to launch teleprompter: \(error.localizedDescription)"
+                return
+            }
+        } else {
+            // Fallback to old method if standalone app not found
+            startListeningService()
+            
+            let overlayURL = URL(fileURLWithPath: "/Users/adamerickson/Projects/PAT/frontend/swiftclient/SwiftOverlayExported/PATOverlay.app")
+            if FileManager.default.fileExists(atPath: overlayURL.path) {
+                do {
+                    let appConfiguration = NSWorkspace.OpenConfiguration()
+                    appConfiguration.activates = true
+                    
+                    _ = try NSWorkspace.shared.open(overlayURL, configuration: appConfiguration)
+                    
+                    viewModel.errorMessage = "🔄 Overlay launched successfully"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        self.viewModel.errorMessage = nil
+                    }
+                    
+                    return
+                } catch {
+                    viewModel.errorMessage = "Failed to launch teleprompter: \(error.localizedDescription)"
+                    return
+                }
+            }
+            
+            viewModel.errorMessage = "❌ Teleprompter components not found"
+        }
+    }
+    
+    private func startListeningService() {
+        // Use shell command to start the Python listening service
+        let scriptPath = "/Users/adamerickson/Projects/PAT/backend/services/listening/live_interview_listener.py"
+        
+        guard FileManager.default.fileExists(atPath: scriptPath) else {
+            viewModel.errorMessage = "Listening service not found at: \(scriptPath)"
+            return
+        }
+        
+        let task = Process()
+        task.launchPath = "/usr/bin/env"
+        task.arguments = ["python3", scriptPath]
+        
+        do {
+            task.launch()
+            DispatchQueue.main.async {
+                viewModel.errorMessage = "🔄 Listening service started"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    viewModel.errorMessage = nil
+                }
+            }
+        } catch {
+            viewModel.errorMessage = "❌ Failed to start listening service: \(error.localizedDescription)"
+        }
+    }
+    
+    private func stopListeningService() {
+        // Try to stop Python listening service gracefully
+        // For now, just log that we should stop it
+        viewModel.errorMessage = "Overlay closed - listening service should be stopped"
+        
+        // Note: In production, we should send a signal to the Python process
+        // or use a PID file to gracefully shut down
+    }
 }
 
 #Preview {
     ChatView()
         .frame(width: 800, height: 600)
 }
+

@@ -7,6 +7,8 @@
 
 import Foundation
 import os.log
+import SwiftUI
+import SwiftUI
 
 class IngestService {
     static let shared = IngestService()
@@ -14,7 +16,7 @@ class IngestService {
     private let baseURL: String
     private let session: URLSession
     private let logger = SharedLogger.shared
-    private init(baseURL: String = "http://127.0.0.1:8001") {
+    private init(baseURL: String = Config.ingestBaseURL) {
             self.baseURL = baseURL
             let config = URLSessionConfiguration.default
             config.timeoutIntervalForRequest = 60
@@ -23,6 +25,91 @@ class IngestService {
             
     
         logger.general.info("IngestService initialized with baseURL: \(baseURL)")
+    }
+    
+    // MARK: - Resume Upload
+    func uploadResume(filePath: String, metadata: [String: Any]) async throws -> UploadResponse {
+        let endpoint = "\(baseURL)/upload"
+        logger.ingest.info("Starting resume upload for: \(filePath)")
+        
+        guard let url = URL(string: endpoint) else {
+            logger.ingest.error("Invalid URL: \(endpoint)")
+            throw IngestError.invalidURL
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        urlRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        
+        // Add file part
+        guard let fileData = try? Data(contentsOf: URL(fileURLWithPath: filePath)) else {
+            logger.ingest.error("Failed to read file: \(filePath)")
+            throw IngestError.fileReadError
+        }
+        
+        let fileName = URL(fileURLWithPath: filePath).lastPathComponent
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/pdf\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        // Add metadata part
+        if let metadataData = try? JSONSerialization.data(withJSONObject: metadata) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"metadata\"\r\n\r\n".data(using: .utf8)!)
+            body.append(metadataData)
+            body.append("\r\n".data(using: .utf8)!)
+        }
+        
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        urlRequest.httpBody = body
+        
+        let startTime = Date()
+        
+        do {
+            let (data, response) = try await session.data(for: urlRequest)
+            let responseTime = Date().timeIntervalSince(startTime)
+            
+            logger.logNetworkResponse(endpoint, statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0, responseTime: responseTime)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                let error = IngestError.invalidResponse
+                logger.logError(error, context: "Invalid HTTP response")
+                throw error
+            }
+            
+            logger.ingest.info("HTTP Status: \(httpResponse.statusCode)")
+            
+            guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
+                let error = IngestError.serverError(httpResponse.statusCode)
+                
+                if let errorString = String(data: data, encoding: .utf8) {
+                    logger.ingest.error("Upload error response: \(errorString)")
+                }
+                
+                logger.logError(error, context: "Upload returned non-2xx status")
+                throw error
+            }
+            
+            do {
+                let uploadResponse = try JSONDecoder().decode(UploadResponse.self, from: data)
+                logger.ingest.info("Resume upload successful. Document ID: \(uploadResponse.document_id ?? "unknown")")
+                return uploadResponse
+            } catch {
+                logger.logError(error, context: "JSON decoding upload response")
+                throw error
+            }
+            
+        } catch {
+            logger.logError(error, context: "Network request failed")
+            throw error
+        }
     }
     func checkAgentService() async -> Bool {
         guard let url = URL(string: "\(baseURL)/health") else { return false }
@@ -36,7 +123,7 @@ class IngestService {
         }
     }
     func ingestDocument(filename: String, content: String, metadata: [String: Any]? = nil) async throws -> IngestResponse {
-        let endpoint = "\(baseURL)/ingest"
+        let endpoint = "\(baseURL)/upload"
         logger.ingest.info("Starting document ingestion for: \(filename)")
         logger.logNetworkRequest(endpoint, method: "POST", body: "Content length: \(content.count)")
         
@@ -45,14 +132,14 @@ class IngestService {
             throw IngestError.invalidURL
         }
         
-        var body: [String: Any] = [
+        let body: [String: Any] = [
             "filename": filename,
-            "content": content
+            "content": content,
+            "metadata": metadata ?? [
+                "type": "document",
+                "tags": ["general", "uploaded"]
+            ]
         ]
-        
-        if let metadata = metadata {
-            body["metadata"] = metadata
-        }
         
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
@@ -210,6 +297,12 @@ class IngestService {
 }
 
 struct IngestResponse: Codable {
+    let status: String
+    let message: String
+    let document_id: String?
+}
+
+struct UploadResponse: Codable {
     let status: String
     let message: String
     let document_id: String?

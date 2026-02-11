@@ -21,13 +21,14 @@ class AgentService {
     private let baseURL: String
     private let session: URLSession
     
-    private init(baseURL: String = "http://127.0.0.1:8002") {
+    private init(baseURL: String = Config.agentBaseURL) {
         self.baseURL = baseURL
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 120
         config.timeoutIntervalForResource = 300
         self.session = URLSession(configuration: config)
     }
+    
     func checkAgentService() async -> Bool {
         guard let url = URL(string: "\(baseURL)/health") else { return false }
         do {
@@ -39,6 +40,7 @@ class AgentService {
             return false
         }
     }
+    
     func query(text: String, webSearch: Bool, useMemory: Bool = true, userId: String = "default", stream: Bool = false) async throws -> QueryResponse {
         var tools: [String] = []
         if webSearch {

@@ -37,12 +37,25 @@
 		E00145132F22A6000053AAD4 /* BackgroundAssets.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = BackgroundAssets.framework; path = System/Library/Frameworks/BackgroundAssets.framework; sourceTree = SDKROOT; };
 		E00145152F22A6290053AAD4 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		E00145172F22A6330053AAD4 /* InputMethodKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = InputMethodKit.framework; path = System/Library/Frameworks/InputMethodKit.framework; sourceTree = SDKROOT; };
-		E0F607092F22E29A00A771CF /* PATclient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = PATclient.app; path = /Users/adamerickson/Projects/PAT/frontend/swiftclient/PATclient/build/Debug/PATclient.app; sourceTree = "<absolute>"; };
+		E0BF82062F3B8FA200562713 /* PATclient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PATclient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E0BF82332F3BA27200562713 /* Exceptions for "PATclient" folder in "PATclient" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E00144FB2F22A4080053AAD4 /* PATclient */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E00145672F22B4BF0053AAD4 /* PATclient */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E0BF82332F3BA27200562713 /* Exceptions for "PATclient" folder in "PATclient" target */,
+			);
 			path = PATclient;
 			sourceTree = "<group>";
 		};
@@ -77,6 +90,7 @@
 		E00144FD2F22A4080053AAD4 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				E0BF82062F3B8FA200562713 /* PATclient.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -119,7 +133,7 @@
 			packageProductDependencies = (
 			);
 			productName = PATclient;
-			productReference = E0F607092F22E29A00A771CF /* PATclient.app */;
+			productReference = E0BF82062F3B8FA200562713 /* PATclient.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

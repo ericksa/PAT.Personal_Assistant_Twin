@@ -5,14 +5,6 @@
 //  Created by Adam Erickson on 1/22/26.
 //
 
-
-//
-//  ChatSession.swift
-//  PATclient
-//
-//  Chat session model for persistence
-//
-
 import Foundation
 
 struct ChatSession: Identifiable, Codable, Hashable {
@@ -70,21 +62,68 @@ struct ChatSettings: Codable, Hashable {
         self.temperature = temperature
         self.maxTokens = maxTokens
         self.useDarkMode = useDarkMode
+<<<<<<< HEAD
+=======
+    }
+    
+    // Custom CodingKeys for backward compatibility
+    enum CodingKeys: String, CodingKey {
+        case useWebSearch, useMemoryContext, provider, llmProvider, selectedModel, temperature, maxTokens, useDarkMode
+    }
+    
+    // Custom decoding to handle missing properties
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Required properties with defaults
+        useWebSearch = try container.decodeIfPresent(Bool.self, forKey: .useWebSearch) ?? false
+        useMemoryContext = try container.decodeIfPresent(Bool.self, forKey: .useMemoryContext) ?? true
+        provider = try container.decodeIfPresent(String.self, forKey: .provider) ?? "ollama"
+        temperature = try container.decodeIfPresent(Double.self, forKey: .temperature) ?? 0.7
+        maxTokens = try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? 2048
+        useDarkMode = try container.decodeIfPresent(Bool.self, forKey: .useDarkMode) ?? false
+        
+        // New properties with backward compatibility
+        // If llmProvider is missing, fallback to provider
+        llmProvider = try container.decodeIfPresent(String.self, forKey: .llmProvider) ?? provider
+        
+        // If selectedModel is missing, use default
+        selectedModel = try container.decodeIfPresent(String.self, forKey: .selectedModel) ?? "llama3"
+    }
+    
+    // Custom encoding
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(useWebSearch, forKey: .useWebSearch)
+        try container.encode(useMemoryContext, forKey: .useMemoryContext)
+        try container.encode(provider, forKey: .provider)
+        try container.encode(llmProvider, forKey: .llmProvider)
+        try container.encode(selectedModel, forKey: .selectedModel)
+        try container.encode(temperature, forKey: .temperature)
+        try container.encode(maxTokens, forKey: .maxTokens)
+        try container.encode(useDarkMode, forKey: .useDarkMode)
+>>>>>>> main
     }
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(useWebSearch)
         hasher.combine(useMemoryContext)
         hasher.combine(provider)
+        hasher.combine(llmProvider)
+        hasher.combine(selectedModel)
         hasher.combine(temperature)
         hasher.combine(maxTokens)
+        hasher.combine(useDarkMode)
     }
     
     static func == (lhs: ChatSettings, rhs: ChatSettings) -> Bool {
         lhs.useWebSearch == rhs.useWebSearch &&
         lhs.useMemoryContext == rhs.useMemoryContext &&
         lhs.provider == rhs.provider &&
+        lhs.llmProvider == rhs.llmProvider &&
+        lhs.selectedModel == rhs.selectedModel &&
         lhs.temperature == rhs.temperature &&
-        lhs.maxTokens == rhs.maxTokens
+        lhs.maxTokens == rhs.maxTokens &&
+        lhs.useDarkMode == rhs.useDarkMode
     }
 }

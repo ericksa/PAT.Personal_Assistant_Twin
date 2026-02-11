@@ -9,15 +9,24 @@ import SwiftUI
 
 struct MessageRow: View {
     let message: Message
+    let viewModel: ChatViewModel  // ✅ Added viewModel parameter
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             avatarView
+                .padding(.top, 4)
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 messageHeader
                 
                 messageContent
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(message.type == .user ? Color.blue.opacity(0.1) : Color.green.opacity(0.1))
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 
                 if !message.sources.isEmpty {
                     sourcesView
@@ -26,9 +35,11 @@ struct MessageRow: View {
                 if !message.toolsUsed.isEmpty {
                     toolsView
                 }
+                
+                footerView
             }
+            .padding(.vertical, 2)
         }
-        .padding(.vertical, 8)
         .padding(.horizontal, 16)
     }
     
@@ -40,7 +51,8 @@ struct MessageRow: View {
                 .frame(width: 36, height: 36)
             
             Text(avatarEmoji)
-                .font(.system(size: 18))
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.white)
         }
     }
     
@@ -48,7 +60,8 @@ struct MessageRow: View {
     private var messageHeader: some View {
         HStack(spacing: 8) {
             Text(messageHeaderTitle)
-                .font(.headline)
+                .font(.subheadline)
+                .fontWeight(.semibold)
                 .foregroundColor(.primary)
             
             if message.type == .assistant {
@@ -79,6 +92,8 @@ struct MessageRow: View {
             .font(.body)
             .foregroundColor(.primary)
             .textSelection(.enabled)
+            .lineSpacing(4)
+            .fixedSize(horizontal: false, vertical: true)
     }
     
     @ViewBuilder
@@ -100,6 +115,7 @@ struct MessageRow: View {
                         Link(source.displayName, destination: nsURL)
                             .font(.caption)
                             .foregroundColor(.blue)
+                            .underline()
                     } else {
                         Text(source.displayName)
                             .font(.caption)
@@ -114,6 +130,7 @@ struct MessageRow: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                .padding(.vertical, 2)
             }
         }
         .padding(.top, 8)
@@ -131,6 +148,24 @@ struct MessageRow: View {
                 .foregroundColor(.secondary)
         }
         .padding(.top, 4)
+    }
+    
+    @ViewBuilder
+    private var footerView: some View {
+        HStack(spacing: 8) {
+            if message.type == .assistant {
+                Button(action: {
+                    // Regenerate this message
+                    Task { await viewModel.regenerateLastResponse() }
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 2)
     }
     
     private var avatarColor: Color {
@@ -179,12 +214,14 @@ struct MessageRow: View {
 }
 
 #Preview {
+    let viewModel = ChatViewModel()  // ✅ Create viewModel for preview
+    
     VStack(spacing: 0) {
         MessageRow(message: Message(
             type: .user,
             content: "What is the current weather in San Francisco?",
             timestamp: Date()
-        ))
+        ), viewModel: viewModel)
         
         Divider()
         
@@ -199,6 +236,7 @@ struct MessageRow: View {
             toolsUsed: ["web"],
             modelUsed: "llama2",
             processingTime: 2.34
-        ))
+        ), viewModel: viewModel)
     }
 }
+

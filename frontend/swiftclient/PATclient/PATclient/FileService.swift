@@ -2,30 +2,40 @@
 //  FileService.swift
 //  PATclient
 //
-//  Created by Adam Erickson on 1/22/26.
-//
-
-
-//
-//  FileService.swift
-//  PATclient
-//
 //  Service for file operations and markdown export
 //
 
 import Foundation
 import AppKit
-internal import UniformTypeIdentifiers
+import UniformTypeIdentifiers
+
+struct ChatExport: Codable {
+    let title: String
+    let exportedAt: Date
+    let messages: [Message]
+    let settings: ChatSettings
+}
 
 class FileService {
     static let shared = FileService()
     
     private init() {}
     
+    // MARK: - String filename helper
+    private static func sanitizedFilename(_ title: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: ":/\\?*|\"< >")
+        return title.components(separatedBy: invalidCharacters).joined(separator: "_")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "_")
+    }
+    
+    // MARK: - Export Methods (MainActor required for NSSavePanel)
+    
+    @MainActor
     func exportChatAsMarkdown(messages: [Message], sessionTitle: String) throws -> URL {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.plainText]
-        savePanel.nameFieldStringValue = "\(sessionTitle.sanitizedFilename()).md"
+        savePanel.nameFieldStringValue = "\(FileService.sanitizedFilename(sessionTitle)).md"
         savePanel.title = "Export Chat as Markdown"
         savePanel.prompt = "Save"
         
@@ -34,22 +44,37 @@ class FileService {
             throw FileError.userCancelled
         }
         
+        let shouldStopAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
         let markdownContent = generateMarkdown(from: messages, sessionTitle: sessionTitle)
         try markdownContent.write(to: url, atomically: true, encoding: .utf8)
         
         return url
     }
     
+    @MainActor
     func exportChatAsJSON(messages: [Message], sessionTitle: String, settings: ChatSettings) throws -> URL {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.json]
-        savePanel.nameFieldStringValue = "\(sessionTitle.sanitizedFilename()).json"
+        savePanel.nameFieldStringValue = "\(FileService.sanitizedFilename(sessionTitle)).json"
         savePanel.title = "Export Chat as JSON"
         savePanel.prompt = "Save"
         
         let response = savePanel.runModal()
         guard response == .OK, let url = savePanel.url else {
             throw FileError.userCancelled
+        }
+        
+        let shouldStopAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
         }
         
         let exportData = ChatExport(
@@ -68,14 +93,18 @@ class FileService {
         return url
     }
     
-    func selectFileToUpload() throws -> URL {
+    // MARK: - Upload Method (MainActor required for NSOpenPanel)
+    
+    @MainActor
+    func selectFileToUpload() async throws -> URL {
         let openPanel = NSOpenPanel()
-        openPanel.allowedContentTypes = [.plainText, .pdf, .text]
+        openPanel.allowedContentTypes = [.plainText, .utf8PlainText, .utf16PlainText, .text, .pdf]
         openPanel.allowsMultipleSelection = false
         openPanel.canChooseDirectories = false
         openPanel.canChooseFiles = true
         openPanel.title = "Select Document to Upload"
         openPanel.prompt = "Upload"
+        openPanel.message = "Select a text or PDF document to upload"
         
         let response = openPanel.runModal()
         guard response == .OK, let url = openPanel.url else {
@@ -86,7 +115,41 @@ class FileService {
     }
     
     func readContent(from url: URL) throws -> String {
-        return try String(contentsOf: url, encoding: .utf8)
+        var isStale = false
+        let bookmarkData = try url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        
+        let resolvedURL = try URL(
+            resolvingBookmarkData: bookmarkData,
+            options: .withSecurityScope,
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
+        
+        guard resolvedURL.startAccessingSecurityScopedResource() else {
+            throw FileError.fileReadError
+        }
+        defer {
+            resolvedURL.stopAccessingSecurityScopedResource()
+        }
+        
+        // Try UTF-8 first
+        if let content = try? String(contentsOf: resolvedURL, encoding: .utf8) {
+            return content
+        }
+        
+        // Try other encodings
+        let encodings: [String.Encoding] = [.utf8, .utf16, .isoLatin1, .macOSRoman, .ascii]
+        for encoding in encodings {
+            if let content = try? String(contentsOf: resolvedURL, encoding: encoding) {
+                return content
+            }
+        }
+        
+        throw FileError.fileReadError
     }
     
     private func generateMarkdown(from messages: [Message], sessionTitle: String) -> String {
@@ -141,38 +204,3 @@ class FileService {
     }
 }
 
-struct ChatExport: Codable {
-    let title: String
-    let exportedAt: Date
-    let messages: [Message]
-    let settings: ChatSettings
-}
-
-enum FileError: Error, LocalizedError {
-    case userCancelled
-    case fileReadError
-    case fileWriteError
-    case invalidFileFormat
-    
-    var errorDescription: String? {
-        switch self {
-        case .userCancelled:
-            return "Operation cancelled by user"
-        case .fileReadError:
-            return "Failed to read file"
-        case .fileWriteError:
-            return "Failed to write file"
-        case .invalidFileFormat:
-            return "Invalid file format"
-        }
-    }
-}
-
-extension String {
-    func sanitizedFilename() -> String {
-        let invalidCharacters = CharacterSet(charactersIn: ":/\\?*|\"<>")
-        return components(separatedBy: invalidCharacters).joined(separator: "_")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "_")
-    }
-}

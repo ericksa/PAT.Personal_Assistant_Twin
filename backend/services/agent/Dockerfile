@@ -19,6 +19,10 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p /data/models /data/documents /data/data /data/docs
 
+# Set PYTHONPATH to include the current directory
+ENV PYTHONPATH=/app
+
 EXPOSE 8000
 
+# Run directly
 CMD ["python", "app.py"]

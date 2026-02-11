@@ -7,7 +7,11 @@
 
 import Foundation
 
+<<<<<<< HEAD
 enum MessageType: String, Hashable {
+=======
+enum MessageType: String, Codable, Hashable {
+>>>>>>> main
     case user
     case assistant
     case system

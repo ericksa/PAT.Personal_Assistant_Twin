@@ -7,9 +7,130 @@ from typing import List, Dict
 import httpx
 import psycopg2
 import redis
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+# Import utility functions and LangChain components
+import sys
+import os
+import logging
+
+# Add current directory to Python path for Docker compatibility
+sys.path.append("/app")
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Setup logger early
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize global variables
+is_question = None
+build_context_from_results = None
+InterviewAssistant = None
+process_interview_question = None
+
+
+def initialize_langchain_components():
+    """Simplified LangChain initialization with clear error handling"""
+    global \
+        is_question, \
+        build_context_from_results, \
+        InterviewAssistant, \
+        process_interview_question
+
+    component_status = {}
+
+    # Test each component individually with detailed logging
+    try:
+        from utils import is_question as utils_is_question
+
+        is_question = utils_is_question
+        component_status["utils"] = "✓ OK"
+        logger.info("✓ utils imported successfully")
+    except ImportError as e:
+        component_status["utils"] = f"✗ Error: {e}"
+        logger.error(f"Failed to import utils: {e}")
+
+    try:
+        from interview_assistant import InterviewAssistant as LC_InterviewAssistant
+
+        InterviewAssistant = LC_InterviewAssistant
+        component_status["interview_assistant"] = "✓ OK"
+        logger.info("✓ InterviewAssistant imported successfully")
+    except ImportError as e:
+        component_status["interview_assistant"] = f"✗ Error: {e}"
+        logger.error(f"Failed to import InterviewAssistant: {e}")
+
+    try:
+        from langgraph_workflow import (
+            process_interview_question as lg_process_interview_question,
+        )
+
+        process_interview_question = lg_process_interview_question
+        component_status["langgraph_workflow"] = "✓ OK"
+        logger.info("✓ LangGraph workflow imported successfully")
+    except ImportError as e:
+        component_status["langgraph_workflow"] = f"✗ Error: {e}"
+        logger.error(f"Failed to import LangGraph workflow: {e}")
+
+    # Check if all components loaded successfully
+    all_ok = all("✓ OK" in status for status in component_status.values())
+
+    if all_ok:
+        logger.info("🎉 All LangChain components initialized successfully")
+        return True
+    else:
+        logger.warning(f"LangChain initialization incomplete: {component_status}")
+
+        # Create basic fallback functions if needed
+        if "✗ Error" in component_status.get("utils", ""):
+
+            def is_question_default(text):
+                """Default question detection"""
+                question_words = [
+                    "what",
+                    "how",
+                    "why",
+                    "when",
+                    "where",
+                    "who",
+                    "can",
+                    "could",
+                    "would",
+                    "should",
+                ]
+                text_lower = text.lower().strip()
+                return (
+                    any(text_lower.startswith(word) for word in question_words)
+                    or "?" in text
+                )
+
+            is_question = is_question_default
+            build_context_from_results = lambda x: "No context available"
+
+        if "✗ Error" in component_status.get("interview_assistant", ""):
+            pass  # Will use None value
+
+        if "✗ Error" in component_status.get("langgraph_workflow", ""):
+
+            async def process_interview_question_fallback(question):
+                """Fallback interview processing"""
+                return {
+                    "status": "processed",
+                    "response": f"Fallback response for: {question}",
+                    "is_question": True,
+                }
+
+            process_interview_question = process_interview_question_fallback
+
+        # Only return True if at least 2/3 components loaded
+        return len([s for s in component_status.values() if "✓ OK" in s]) >= 2
+
+
+# Initialize components when module loads
+initialize_langchain_components()
 
 
 logging.basicConfig(level=logging.INFO)
@@ -18,8 +139,36 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="PAT Agent Service",
     description="AI agent with RAG, web search, and tool orchestration",
-    version="1.0.0"
+    version="1.0.0",
 )
+
+
+# WebSocket Connection Manager for live interview updates
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"WebSocket send error: {e}")
+                disconnected.append(connection)
+
+        for connection in disconnected:
+            self.disconnect(connection)
+
+
+interview_manager = ConnectionManager()
 
 # CORS configuration
 app.add_middleware(
@@ -44,7 +193,6 @@ redis_client = redis.from_url(REDIS_URL)
 resume_generator = None
 
 
-
 class QueryRequest(BaseModel):
     query: str
     user_id: str = "default"
@@ -65,6 +213,136 @@ class WebSearchResult(BaseModel):
     content: str
     url: str
     source: str
+
+
+# Model for live interview input
+class InterviewRequest(BaseModel):
+    text: str
+    source: str = "interviewer"
+
+
+# Simple test endpoint
+@app.get("/test-interview")
+async def test_interview():
+    return {"message": "Interview endpoint working"}
+
+
+# WebSocket endpoint for teleprompter
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time teleprompter updates"""
+    await interview_manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Handle ping messages
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        interview_manager.disconnect(websocket)
+        logger.info("WebSocket client disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        interview_manager.disconnect(websocket)
+
+
+# Endpoint to process live interview input
+@app.post("/interview/process")
+async def process_interview_input(request: InterviewRequest):
+    """Process live interview input and send response to teleprompter using LangGraph workflow"""
+    question = request.text
+    logger.info(f"Processing interview question: {question}")
+
+    try:
+        # Process through LangGraph workflow (more intelligent and faster)
+        # Check if LangChain components are available
+        if process_interview_question is not None:
+            result = await process_interview_question(question)
+
+            # If it's not a question, just acknowledge
+            if not result.get("is_question", True):
+                logger.info(f"Text doesn't appear to be a question: {question}")
+                return {"status": "received", "question": question, "processed": False}
+
+            response_text = result["response"]
+        else:
+            # Fallback to basic processing if LangChain is not available
+            logger.warning("LangChain components not available, using basic processing")
+
+            # Check if this is actually a question
+            if is_question and not is_question(question):
+                logger.info(f"Text doesn't appear to be a question: {question}")
+                return {"status": "received", "question": question, "processed": False}
+
+            # Get context from local documents
+            local_results = await search_local_documents(question)
+
+            # Get web search results if needed
+            web_results = []
+            if should_use_web_search(question, local_results):
+                web_results = await search_web(question)
+
+            # Build context from both local and web results
+            context = build_context(local_results, web_results)
+
+            # Get AI response using basic method
+            try:
+                from .llm import get_ai_response
+            except ImportError:
+                try:
+                    from llm import get_ai_response
+                except ImportError:
+                    # Fallback for when running directly
+                    async def get_ai_response(question, context, is_interview=False):
+                        """Fallback AI response function"""
+                        return f"Fallback response for question: {question}"
+
+            response_text = await get_ai_response(question, context, is_interview=True)
+
+        # Send response to teleprompter service
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://teleprompter-app:8000/broadcast",
+                    json={"message": response_text},
+                    timeout=10,  # Even faster timeout for LangGraph
+                )
+                if response.status_code == 200:
+                    logger.info(f"Successfully sent response to teleprompter service")
+                else:
+                    logger.error(
+                        f"Teleprompter service returned {response.status_code}: {response.text}"
+                    )
+        except Exception as e:
+            logger.error(f"Error sending to teleprompter service: {e}")
+
+        logger.info(f"Sent response to teleprompter: {response_text[:100]}...")
+        return {
+            "status": "processed"
+            if process_interview_question is not None
+            else "processed_basic",
+            "question": question,
+            "response": response_text,
+        }
+
+    except Exception as e:
+        logger.error(f"Error processing interview question: {e}")
+        error_message = f"Error processing question: {str(e)}"
+
+        # Send error to teleprompter service
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "http://teleprompter-app:8000/broadcast",
+                    json={"message": error_message},
+                    timeout=10,
+                )
+        except Exception as broadcast_error:
+            logger.error(
+                f"Error sending error to teleprompter service: {broadcast_error}"
+            )
+
+        return {"status": "error", "question": question, "error": str(e)}
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -94,7 +372,7 @@ async def query_agent(request: QueryRequest):
             sources=local_results,
             tools_used=[],
             model_used=LLM_PROVIDER,
-            processing_time=processing_time
+            processing_time=processing_time,
         )
 
     except Exception as e:
@@ -103,7 +381,7 @@ async def query_agent(request: QueryRequest):
             response=f"Sorry, I encountered an error: {str(e)}",
             sources=[],
             tools_used=[],
-            processing_time=(datetime.now() - start_time).total_seconds()
+            processing_time=(datetime.now() - start_time).total_seconds(),
         )
 
 
@@ -114,7 +392,7 @@ async def search_local_documents(query: str) -> List[Dict]:
             response = await client.post(
                 f"{INGEST_SERVICE_URL}/search",
                 json={"query": query, "top_k": TOP_K},
-                timeout=30
+                timeout=30,
             )
             if response.status_code == 200:
                 return response.json()
@@ -127,7 +405,15 @@ async def search_local_documents(query: str) -> List[Dict]:
 def should_use_web_search(query: str, local_results: List[Dict]) -> bool:
     """Determine if web search is needed"""
     # If no local results or query asks for current info
-    current_keywords = ['current', 'today', 'latest', 'news', 'weather', 'stock', 'price']
+    current_keywords = [
+        "current",
+        "today",
+        "latest",
+        "news",
+        "weather",
+        "stock",
+        "price",
+    ]
     if any(keyword in query.lower() for keyword in current_keywords):
         return True
     return len(local_results) == 0
@@ -147,13 +433,15 @@ async def search_web(query: str) -> List[WebSearchResult]:
             data = response.json()
 
             results = []
-            if data.get('AbstractText'):
-                results.append(WebSearchResult(
-                    title=data.get('Heading', 'DuckDuckGo Result'),
-                    content=data.get('AbstractText', ''),
-                    url=data.get('AbstractURL', ''),
-                    source='duckduckgo'
-                ))
+            if data.get("AbstractText"):
+                results.append(
+                    WebSearchResult(
+                        title=data.get("Heading", "DuckDuckGo Result"),
+                        content=data.get("AbstractText", ""),
+                        url=data.get("AbstractURL", ""),
+                        source="duckduckgo",
+                    )
+                )
 
             return results
 
@@ -169,7 +457,9 @@ def build_context(local_results: List[Dict], web_results: List[WebSearchResult])
     if local_results:
         context_parts.append("Relevant documents:")
         for result in local_results[:3]:
-            context_parts.append(f"- {result.get('filename', 'Document')}: {result.get('content', '')[:300]}...")
+            context_parts.append(
+                f"- {result.get('filename', 'Document')}: {result.get('content', '')[:300]}..."
+            )
 
     if web_results:
         context_parts.append("\nCurrent information from web:")
@@ -201,12 +491,8 @@ Answer:"""
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{OLLAMA_BASE_URL}/api/generate",
-                    json={
-                        "model": "deepseek-v3.1:671b-cloud",
-                        "prompt": prompt,
-                        "stream": False
-                    },
-                    timeout=120
+                    json={"model": "llama3:8b", "prompt": prompt, "stream": False},
+                    timeout=120,
                 )
                 logger.info(f"Ollama response status: {response.status_code}")
                 if response.status_code == 200:
@@ -214,7 +500,9 @@ Answer:"""
                     logger.info(f"Ollama response data: {data}")
                     return data.get("response", "No response from Ollama")
                 else:
-                    logger.error(f"Ollama error status: {response.status_code}, response text: {response.text}")
+                    logger.error(
+                        f"Ollama error status: {response.status_code}, response text: {response.text}"
+                    )
                     return "Unable to get response from Ollama"
         except Exception as e:
             logger.error(f"Ollama error: {e}", exc_info=True)
@@ -240,32 +528,31 @@ async def generate_resume(request: dict):
 
         if resume_generator:
             customized_resume = resume_generator.generate_resume(
-                resume_data,
-                job_description,
-                template_type
+                resume_data, job_description, template_type
             )
 
             return {
                 "status": "success",
                 "resume": customized_resume,
-                "message": "Resume generated successfully"
+                "message": "Resume generated successfully",
             }
         else:
-            raise HTTPException(status_code=500, detail="Resume generator not available")
+            raise HTTPException(
+                status_code=500, detail="Resume generator not available"
+            )
 
     except Exception as e:
         logger.error(f"Resume generation error: {e}")
-        raise HTTPException(status_code=500, detail=f"Resume generation failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Resume generation failed: {str(e)}"
+        )
 
 
 async def get_latest_resume():
     """Get the most recent resume from database"""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{INGEST_SERVICE_URL}/resumes",
-                timeout=30
-            )
+            response = await client.get(f"{INGEST_SERVICE_URL}/resumes", timeout=30)
             if response.status_code == 200:
                 data = response.json()
                 if data.get("resumes"):
@@ -304,14 +591,36 @@ async def health_check():
         ingest_healthy = False
 
     return {
-        "status": "healthy" if all([db_healthy, redis_healthy, ingest_healthy]) else "degraded",
+        "status": "healthy"
+        if all([db_healthy, redis_healthy, ingest_healthy])
+        else "degraded",
         "services": {
             "database": "healthy" if db_healthy else "unhealthy",
             "redis": "healthy" if redis_healthy else "unhealthy",
             "ingest": "healthy" if ingest_healthy else "unhealthy",
-            "llm_provider": LLM_PROVIDER
-        }
+            "llm_provider": LLM_PROVIDER,
+        },
     }
+
+
+@app.get("/interview/display", response_class=HTMLResponse)
+async def interview_display():
+    """Serve the interview teleprompter display"""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Interview Teleprompter</title>
+    </head>
+    <body>
+        <h1>Interview Teleprompter</h1>
+        <div id="content">Waiting for content...</div>
+        <script>
+            console.log("Connected to interview WebSocket");
+        </script>
+    </body>
+    </html>
+    """
 
 
 if __name__ == "__main__":

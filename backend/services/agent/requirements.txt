@@ -1,10 +1,16 @@
 # services/agent/requirements.txt (add Jinja2)
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
-psycopg2-binary==2.9.9
-redis==5.0.1
-requests==2.31.0
-httpx==0.25.0
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+pydantic>=2.7.4,<3.0.0
+psycopg2-binary>=2.9.9
+redis>=5.0.1
+requests>=2.31.0
+httpx>=0.25.0
 typing_extensions>=4.8.0
-Jinja2==3.1.2  # Add this for resume templates
+Jinja2>=3.1.2  # Add this for resume templates
+
+# LangChain dependencies for enhanced AI capabilities
+langchain>=0.3.27
+langchain-community>=0.3.27
+langchain-ollama>=0.2.0
+langgraph>=1.0.1
