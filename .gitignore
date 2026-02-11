@@ -33,3 +33,7 @@ backend/.claude/settings.local.json
 /frontend/swiftclient/PATclient/PATclient/SwiftOverlay/.build
 /frontend/swiftclient/SwiftOverlay/.build/arm64-apple-macosx/debug
 /frontend/swiftclient/SwiftOverlay/.build
+/backend/.claude
+.idea/workspace.xml
+/.idea
+/backend/.claude
