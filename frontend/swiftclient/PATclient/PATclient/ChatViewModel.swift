@@ -16,6 +16,7 @@ final class ChatViewModel: ObservableObject {
     @Published public var ingestStatus: ServiceStatus = .healthy
     @Published public var ollamaStatus: ServiceStatus = .disconnected
     @Published public var agentStatus: ServiceStatus = .disconnected
+    @Published public var patCoreStatus: ServiceStatus = .disconnected
     @Published public var agentHealthDetails: HealthStatus? = nil
     @Published public var currentSession: ChatSession?
 
@@ -38,7 +39,7 @@ final class ChatViewModel: ObservableObject {
     
     /// Check if all required services are healthy
     public func areServicesHealthy() -> Bool {
-        return ollamaStatus == .healthy && agentStatus == .healthy
+        return ollamaStatus == .healthy && agentStatus == .healthy && patCoreStatus == .healthy
     }
     
     /// Perform initial health check
@@ -48,8 +49,14 @@ final class ChatViewModel: ObservableObject {
     
     /// Check the status of all services
     public func checkAllServices() async {
-        // Perform health checks by querying Agent and Ollama services
-        // For now, simulate checking services using AgentService
+        // Perform health checks by querying Agent, Ollama, and PAT Core services
+        
+        // Check PAT Core service
+        let patHealthy = await PATCoreService.shared.checkHealth()
+        await MainActor.run {
+            self.patCoreStatus = patHealthy ? .healthy : .disconnected
+        }
+        
         do {
             let healthStatus = try await AgentService.shared.checkHealth()
             await MainActor.run {
