@@ -97,6 +97,8 @@ class TaskUpdate(BaseModel):
     completion_notes: Optional[str] = None
     due_date: Optional[date] = None
     reminder_date: Optional[datetime] = None
+    external_task_id: Optional[str] = None
+    tags: Optional[List[str]] = None
 
 
 class TaskFilters(BaseModel):

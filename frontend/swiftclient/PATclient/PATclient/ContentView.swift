@@ -24,11 +24,17 @@ struct ContentView: View {
                 }
                 .tag(1)
             
+            EmailsView()
+                .tabItem {
+                    Label("Emails", systemImage: "envelope")
+                }
+                .tag(2)
+            
             TasksView()
                 .tabItem {
                     Label("Tasks", systemImage: "checklist")
                 }
-                .tag(2)
+                .tag(3)
         }
         .padding()
         .frame(minWidth: 800, minHeight: 600)

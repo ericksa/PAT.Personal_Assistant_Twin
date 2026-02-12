@@ -1,18 +1,21 @@
-2026-02-12 04:12:46 - pat-core - INFO - Logging initialized for pat-core (level=INFO)
-2026-02-12 04:12:46 - __main__ - INFO - PAT Core API initialized with Llama 3.2 3B
-2026-02-12 04:12:46 - __main__ - INFO - Starting PAT Core API
-2026-02-12 04:12:46 - uvicorn.error - INFO - Started server process [5959]
-2026-02-12 04:12:46 - uvicorn.error - INFO - Waiting for application startup.
-2026-02-12 04:12:46 - uvicorn.error - INFO - Application startup complete.
-2026-02-12 04:12:46 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8010 (Press CTRL+C to quit)
-2026-02-12 04:12:51 - uvicorn.access - INFO - 127.0.0.1:52619 - "GET /pat/health HTTP/1.1" 200
-2026-02-12 04:12:51 - src.services.llm_service - INFO - Sending request to Ollama: http://localhost:11434/api/generate
-2026-02-12 04:12:51 - httpx - INFO - HTTP Request: POST http://localhost:11434/api/generate "HTTP/1.1 200 OK"
-2026-02-12 04:12:51 - src.services.llm_service - INFO - Got response from Ollama: 2 characters
-2026-02-12 04:12:51 - uvicorn.access - INFO - 127.0.0.1:52621 - "POST /pat/chat/test-connection HTTP/1.1" 200
-2026-02-12 04:12:51 - src.services.calendar_service - WARNING - Found 2 conflicts for new event
-2026-02-12 04:12:51 - src.services.websocket_manager - WARNING - No active WebSocket connections to broadcast to.
-2026-02-12 04:12:51 - uvicorn.access - INFO - 127.0.0.1:52624 - "POST /pat/calendar/events HTTP/1.1" 200
-2026-02-12 04:12:51 - uvicorn.access - INFO - 127.0.0.1:52636 - "GET /pat/calendar/events HTTP/1.1" 200
-2026-02-12 04:12:51 - uvicorn.access - INFO - 127.0.0.1:52638 - "GET /pat/emails HTTP/1.1" 200
-2026-02-12 04:12:51 - uvicorn.access - INFO - 127.0.0.1:52640 - "GET /pat/tasks HTTP/1.1" 200
+2026-02-12 05:31:56 - pat-core - INFO - Logging initialized for pat-core (level=INFO)
+2026-02-12 05:31:56 - __main__ - INFO - PAT Core API initialized with Llama 3.2 3B
+2026-02-12 05:31:56 - __main__ - INFO - Starting PAT Core API
+2026-02-12 05:31:56 - uvicorn.error - INFO - Started server process [88447]
+2026-02-12 05:31:56 - uvicorn.error - INFO - Waiting for application startup.
+2026-02-12 05:31:56 - uvicorn.error - INFO - Application startup complete.
+2026-02-12 05:31:56 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8010 (Press CTRL+C to quit)
+2026-02-12 05:32:09 - uvicorn.access - INFO - 127.0.0.1:54433 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 05:32:09 - uvicorn.access - INFO - 127.0.0.1:54445 - "GET /pat/emails?limit=5 HTTP/1.1" 200
+2026-02-12 05:32:18 - uvicorn.access - INFO - 127.0.0.1:54448 - "POST /pat/emails/sync?limit=5 HTTP/1.1" 200
+2026-02-12 05:32:23 - uvicorn.access - INFO - 127.0.0.1:54451 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 05:32:23 - uvicorn.access - INFO - 127.0.0.1:54453 - "GET /pat/emails?limit=5 HTTP/1.1" 200
+2026-02-12 05:32:24 - uvicorn.access - INFO - 127.0.0.1:54455 - "POST /pat/emails/0f7b1e9c-77c1-4930-b55d-5380b8f7069c/read HTTP/1.1" 200
+2026-02-12 05:32:24 - src.services.llm_service - INFO - Sending request to Ollama: http://localhost:11434/api/generate
+2026-02-12 05:32:28 - httpx - INFO - HTTP Request: POST http://localhost:11434/api/generate "HTTP/1.1 200 OK"
+2026-02-12 05:32:28 - src.services.llm_service - INFO - Got response from Ollama: 400 characters
+2026-02-12 05:32:28 - uvicorn.access - INFO - 127.0.0.1:54457 - "POST /pat/emails/0f7b1e9c-77c1-4930-b55d-5380b8f7069c/classify HTTP/1.1" 200
+2026-02-12 05:32:28 - src.services.llm_service - INFO - Sending request to Ollama: http://localhost:11434/api/generate
+2026-02-12 05:32:29 - httpx - INFO - HTTP Request: POST http://localhost:11434/api/generate "HTTP/1.1 200 OK"
+2026-02-12 05:32:29 - src.services.llm_service - INFO - Got response from Ollama: 300 characters
+2026-02-12 05:32:29 - uvicorn.access - INFO - 127.0.0.1:54470 - "POST /pat/emails/0f7b1e9c-77c1-4930-b55d-5380b8f7069c/summarize HTTP/1.1" 200
