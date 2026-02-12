@@ -7,6 +7,9 @@ import os
 # Import models
 from models.job_listing import JobSearchRequest, JobStatus
 
+# Import metrics
+from api.metrics import metrics_router, initialize_metrics
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -15,6 +18,12 @@ def create_app(job_service=None, scheduler_service=None):
     """Create FastAPI application with dependency injection"""
     app = FastAPI(title="PAT Job Search Service")
 
+    # Include metrics router
+    app.include_router(metrics_router)
+    initialize_metrics(
+        version="1.0.0", environment=os.getenv("ENVIRONMENT", "development")
+    )
+
     # Import JobSearchService dynamically to prevent circular imports
     if job_service is None:
         from core.job_service import JobSearchService
@@ -22,9 +31,9 @@ def create_app(job_service=None, scheduler_service=None):
         job_service = JobSearchService()
 
     if scheduler_service is None:
-        from core.simple_scheduler import SimpleJobSearchScheduler
+        from scheduler import JobSearchScheduler
 
-        scheduler_service = SimpleJobSearchScheduler(job_service)
+        scheduler_service = JobSearchScheduler()
 
     @app.get("/health")
     async def health_check():
@@ -70,11 +79,18 @@ def create_app(job_service=None, scheduler_service=None):
     @app.get("/scheduler/status")
     async def scheduler_status():
         """Get scheduler status"""
-        jobs = scheduler_service.scheduler.get_jobs()
+        if hasattr(scheduler_service, "scheduler"):
+            jobs = scheduler_service.scheduler.get_jobs()
+            return {
+                "status": "running",
+                "scheduled_jobs": len(jobs),
+                "next_runtime": str(jobs[0].next_run_time)
+                if jobs
+                else "No scheduled jobs",
+            }
         return {
-            "status": "running",
-            "scheduled_jobs": len(jobs),
-            "next_runtime": str(jobs[0].next_run_time) if jobs else "No scheduled jobs",
+            "status": "not_available",
+            "message": "Scheduler not properly initialized",
         }
 
     @app.post("/jobs/alert")

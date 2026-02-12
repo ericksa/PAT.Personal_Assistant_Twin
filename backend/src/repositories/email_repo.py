@@ -174,3 +174,45 @@ class EmailRepository(BaseRepository):
         query = "DELETE FROM emails WHERE id = $1"
         result = await self.execute(query, email_id)
         return "DELETE 1" in result
+
+    async def get_analytics(self, user_id: str) -> Dict[str, Any]:
+        """Get email analytics for a user"""
+        query = """
+            SELECT 
+                COUNT(*) as total_emails,
+                COUNT(*) FILTER (WHERE read = false) as unread_count,
+                COUNT(*) FILTER (WHERE flagged = true) as flagged_count,
+                COUNT(*) FILTER (WHERE priority >= 7) as urgent_count
+            FROM emails
+            WHERE user_id = $1
+        """
+        result = await self.fetchrow(query, user_id)
+
+        # Get category counts
+        cat_query = """
+            SELECT category, COUNT(*) as count
+            FROM emails
+            WHERE user_id = $1 AND category IS NOT NULL
+            GROUP BY category
+        """
+        cat_results = await self.fetch(cat_query, user_id)
+        categories = {r["category"]: r["count"] for r in cat_results}
+
+        analytics = dict(result) if result else {}
+        analytics["categories"] = categories
+        return analytics
+
+    async def list_threads(
+        self, user_id: str, limit: int = 20, offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """List email threads"""
+        query = """
+            SELECT thread_id, subject, MAX(received_at) as last_message_at, COUNT(*) as message_count
+            FROM emails
+            WHERE user_id = $1 AND thread_id IS NOT NULL
+            GROUP BY thread_id, subject
+            ORDER BY last_message_at DESC
+            LIMIT $2 OFFSET $3
+        """
+        results = await self.fetch(query, user_id, limit, offset)
+        return [dict(r) for r in results]

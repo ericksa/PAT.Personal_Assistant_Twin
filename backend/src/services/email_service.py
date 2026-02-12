@@ -10,7 +10,7 @@ from src.models.email import EmailCreate, EmailUpdate, EmailCategory
 from src.models.task import TaskCreate, TaskSource, TaskStatus
 from src.models.calendar import CalendarEventCreate
 from src.services.llm_service import LlamaLLMService
-from src.utils.applescript.base_manager import AppleScriptManager
+from src.utils.applescript.mail_manager import MailManager
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,13 @@ class EmailService:
         task_repo: TaskRepository,
         calendar_repo: CalendarRepository,
         llm_service: LlamaLLMService,
-        applescript_manager: AppleScriptManager,
+        mail_manager: MailManager,
     ):
         self.email_repo = email_repo
         self.task_repo = task_repo
         self.calendar_repo = calendar_repo
         self.llm_service = llm_service
-        self.applescript = applescript_manager
+        self.mail_manager = mail_manager
 
     async def sync_from_mailbox(self, user_id_str: str, limit: int = 100) -> dict:
         """Sync emails from Apple Mail to database"""
@@ -58,7 +58,7 @@ class EmailService:
             end tell
             """
 
-            apple_ids = await self.applescript.run_applescript(script)
+            apple_ids = await self.mail_manager.run_applescript(script)
             if not apple_ids:
                 return {**result, "message": "No emails found in Mail inbox"}
 
@@ -103,7 +103,7 @@ class EmailService:
         end tell
         """
 
-        raw_data = await self.applescript.run_applescript(script)
+        raw_data = await self.mail_manager.run_applescript(script)
 
         if raw_data and isinstance(raw_data, str):
             parts = raw_data.split("|", 5)
@@ -135,6 +135,54 @@ class EmailService:
             )
 
             await self.email_repo.create_email(email_create)
+
+    async def send_email(
+        self, recipient: str, subject: str, body: str, cc: Optional[List[str]] = None
+    ) -> bool:
+        """Send a new email"""
+        return await self.mail_manager.send_email(recipient, subject, body, cc)
+
+    async def reply_to(self, email_id: str, body: str, reply_all: bool = False) -> bool:
+        """Reply to an existing email"""
+        email = await self.email_repo.get_email(email_id)
+        if not email or not email.get("external_message_id"):
+            return False
+
+        success = await self.mail_manager.reply_to_email(
+            email["external_message_id"], body, reply_all
+        )
+
+        if success:
+            # Mark as read in DB
+            await self.email_repo.update_email(email_id, EmailUpdate(read=True))
+
+        return success
+
+    async def archive(self, email_id: str) -> bool:
+        """Archive an email"""
+        email = await self.email_repo.get_email(email_id)
+        if not email or not email.get("external_message_id"):
+            return False
+
+        success = await self.mail_manager.archive_email(email["external_message_id"])
+
+        if success:
+            await self.email_repo.update_email(email_id, EmailUpdate(folder="Archive"))
+
+        return success
+
+    async def mark_read(self, email_id: str) -> bool:
+        """Mark email as read"""
+        email = await self.email_repo.get_email(email_id)
+        if not email or not email.get("external_message_id"):
+            return False
+
+        success = await self.mail_manager.mark_as_read(email["external_message_id"])
+
+        if success:
+            await self.email_repo.update_email(email_id, EmailUpdate(read=True))
+
+        return success
 
     async def classify_email(self, email_id: str, user_id: str) -> dict:
         """Classify an email using AI"""

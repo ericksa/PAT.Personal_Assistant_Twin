@@ -1,15 +1,16 @@
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, Annotated, Sequence
-from langchain_core.messages import HumanMessage, AIMessage
-import operator
+from langgraph.graph.message import add_messages
+from typing import TypedDict, Annotated, Sequence, List, Union, Dict, Any
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-# Define the state structure
+# Define the state structure using add_messages for proper message handling
 class InterviewState(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
     question: str
     context: str
     is_question: bool
@@ -21,7 +22,7 @@ class InterviewState(TypedDict):
 
 
 # Node functions for the graph
-async def detect_question(state: InterviewState) -> InterviewState:
+async def detect_question(state: InterviewState) -> Dict[str, Any]:
     """Detect if the input is actually a question"""
     try:
         # Use absolute import
@@ -49,6 +50,7 @@ async def detect_question(state: InterviewState) -> InterviewState:
                     "could",
                     "would",
                     "should",
+                    "success",
                 ]
                 text_lower = text.lower().strip()
                 return (
@@ -63,8 +65,129 @@ async def detect_question(state: InterviewState) -> InterviewState:
         f"Question detection: {'Yes' if is_q else 'No'} - '{state['question']}'"
     )
 
-    # Return full state with updated field
-    return {**state, "is_question": is_q}
+    # Initialize messages if empty
+    messages = state.get("messages", [])
+    if not messages:
+        messages = [HumanMessage(content=state["question"])]
+
+    return {
+        "messages": messages,
+        "is_question": is_q,
+    }
+
+
+async def search_documents(state: InterviewState) -> Dict[str, Any]:
+    """Search local documents for context"""
+    try:
+        # This would integrate with your existing document search
+        # For now, we'll simulate the search
+        logger.info(f"Searching documents for: {state['question']}")
+
+        # In a real implementation, this would call your search function
+        # local_results = await search_local_documents(state["question"])
+        # context = build_context(local_results, [])
+
+        simulated_context = f"Relevant information about '{state['question']}' from Adam's experience and background."
+
+        return {"context": simulated_context}
+    except Exception as e:
+        logger.error(f"Document search error: {e}")
+        return {"context": "No relevant documents found."}
+
+
+async def check_needs_web_search(state: InterviewState) -> Dict[str, Any]:
+    """Determine if web search is needed"""
+    # Simple heuristic: if no local context or specific keywords
+    needs_search = len(state["context"]) < 50 or any(
+        keyword in state["question"].lower()
+        for keyword in ["current", "latest", "news", "trend", "2024", "recent"]
+    )
+
+    logger.info(f"Web search needed: {needs_search}")
+    return {"needs_web_search": needs_search}
+
+
+async def perform_web_search(state: InterviewState) -> Dict[str, Any]:
+    """Perform web search for current information"""
+    if not state["needs_web_search"]:
+        return {"web_search_results": ""}
+
+    try:
+        logger.info(f"Performing web search for: {state['question']}")
+
+        # In a real implementation, this would call your web search function
+        # web_results = await search_web(state["question"])
+        # formatted_results = "\n".join([f"- {r.title}: {r.content[:100]}" for r in web_results])
+
+        simulated_results = (
+            f"Current information about '{state['question']}' from web search."
+        )
+
+        return {"web_search_results": simulated_results}
+    except Exception as e:
+        logger.error(f"Web search error: {e}")
+        return {"web_search_results": "Web search unavailable."}
+
+
+async def generate_response(state: InterviewState) -> Dict[str, Any]:
+    """Generate the final response using LangChain"""
+    try:
+        # Combine all context
+        full_context = f"""{state["context"]}
+
+{state["web_search_results"] if state["web_search_results"] else ""}"""
+
+        # Use LangChain assistant to generate response
+        # Import the InterviewAssistant using absolute import
+        try:
+            from interview_assistant import InterviewAssistant
+
+            assistant = InterviewAssistant()
+            logger.info("✓ InterviewAssistant imported successfully")
+        except ImportError as e:
+            try:
+                from .interview_assistant import InterviewAssistant
+
+                assistant = InterviewAssistant()
+                logger.info("✓ InterviewAssistant imported (relative import)")
+            except ImportError:
+                logger.error(f"Failed to import InterviewAssistant: {e}")
+                return {
+                    "final_response": "Error: Failed to initialize LangChain assistant",
+                    "error": str(e),
+                }
+        response = await assistant.generate_response(state["question"], full_context)
+
+        logger.info(f"Generated response: {response[:100]}...")
+
+        # Add the AI response to messages
+        new_messages = [AIMessage(content=response)]
+
+        return {
+            "final_response": response,
+            "messages": new_messages,
+        }
+    except Exception as e:
+        logger.error(f"Response generation error: {e}")
+        return {
+            "final_response": f"Error generating response: {str(e)}",
+            "error": str(e),
+        }
+
+
+async def handle_non_question(state: InterviewState) -> Dict[str, Any]:
+    """Handle non-question inputs"""
+    response = (
+        f"Acknowledged: '{state['question']}' (not processed as interview question)"
+    )
+
+    # Add the AI response to messages
+    new_messages = [AIMessage(content=response)]
+
+    return {
+        "final_response": response,
+        "messages": new_messages,
+    }
 
 
 async def search_documents(state: InterviewState) -> InterviewState:
@@ -80,10 +203,10 @@ async def search_documents(state: InterviewState) -> InterviewState:
 
         simulated_context = f"Relevant information about '{state['question']}' from Adam's experience and background."
 
-        return {**state, "context": simulated_context}
+        return {"context": simulated_context}
     except Exception as e:
         logger.error(f"Document search error: {e}")
-        return {**state, "context": "No relevant documents found."}
+        return {"context": "No relevant documents found."}
 
 
 async def check_needs_web_search(state: InterviewState) -> InterviewState:
@@ -95,13 +218,13 @@ async def check_needs_web_search(state: InterviewState) -> InterviewState:
     )
 
     logger.info(f"Web search needed: {needs_search}")
-    return {**state, "needs_web_search": needs_search}
+    return {"needs_web_search": needs_search}
 
 
 async def perform_web_search(state: InterviewState) -> InterviewState:
     """Perform web search for current information"""
     if not state["needs_web_search"]:
-        return {**state, "web_search_results": ""}
+        return {"web_search_results": ""}
 
     try:
         logger.info(f"Performing web search for: {state['question']}")
@@ -114,10 +237,10 @@ async def perform_web_search(state: InterviewState) -> InterviewState:
             f"Current information about '{state['question']}' from web search."
         )
 
-        return {**state, "web_search_results": simulated_results}
+        return {"web_search_results": simulated_results}
     except Exception as e:
         logger.error(f"Web search error: {e}")
-        return {**state, "web_search_results": "Web search unavailable."}
+        return {"web_search_results": "Web search unavailable."}
 
 
 async def generate_response(state: InterviewState) -> InterviewState:
@@ -144,18 +267,23 @@ async def generate_response(state: InterviewState) -> InterviewState:
             except ImportError:
                 logger.error(f"Failed to import InterviewAssistant: {e}")
                 return {
-                    **state,
                     "final_response": "Error: Failed to initialize LangChain assistant",
                     "error": str(e),
                 }
         response = await assistant.generate_response(state["question"], full_context)
 
         logger.info(f"Generated response: {response[:100]}...")
-        return {**state, "final_response": response}
+
+        # Add the AI response to messages
+        new_messages = [AIMessage(content=response)]
+
+        return {
+            "final_response": response,
+            "messages": new_messages,
+        }
     except Exception as e:
         logger.error(f"Response generation error: {e}")
         return {
-            **state,
             "final_response": f"Error generating response: {str(e)}",
             "error": str(e),
         }
@@ -166,7 +294,14 @@ async def handle_non_question(state: InterviewState) -> InterviewState:
     response = (
         f"Acknowledged: '{state['question']}' (not processed as interview question)"
     )
-    return {**state, "final_response": response}
+
+    # Add the AI response to messages
+    new_messages = [AIMessage(content=response)]
+
+    return {
+        "final_response": response,
+        "messages": new_messages,
+    }
 
 
 # Create the workflow graph
@@ -228,6 +363,7 @@ async def process_interview_question(question: str) -> dict:
     try:
         logger.info(f"Starting process_interview_question with question: {question}")
         initial_state: InterviewState = {
+            "messages": [HumanMessage(content=question)],
             "question": question,
             "context": "",
             "is_question": False,
@@ -242,13 +378,14 @@ async def process_interview_question(question: str) -> dict:
         logger.info("Invoking interview_graph.ainvoke")
         final_state = await interview_graph.ainvoke(initial_state)
         logger.info(
-            f"Completed interview_graph.ainvoke with final_state: {final_state}"
+            f"Completed interview_graph.ainvoke with final_state keys: {final_state.keys()}"
         )
 
         return {
             "status": "processed" if not final_state.get("error") else "error",
             "response": final_state["final_response"],
             "is_question": final_state["is_question"],
+            "messages": final_state.get("messages", []),
         }
 
     except Exception as e:
@@ -258,4 +395,5 @@ async def process_interview_question(question: str) -> dict:
             "response": f"Workflow error: {str(e)}",
             "is_question": False,
             "error": str(e),
+            "messages": [],
         }

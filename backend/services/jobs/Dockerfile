@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code with new src structure
-COPY src/ /app/src/
+# Copy application code
+COPY . /app
 
-# Set PYTHONPATH to include the src directory
+# Set PYTHONPATH to include the current directory
 ENV PYTHONPATH=/app:$PYTHONPATH
 
 EXPOSE 8007
@@ -24,5 +24,5 @@ EXPOSE 8007
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Run the application using module import
-CMD ["python", "-m", "src.main"]
+# Run the application
+CMD ["python", "main.py"]

@@ -181,6 +181,97 @@ class PATCoreService {
         try validateResponse(response)
     }
     
+    // MARK: - Emails
+    
+    func listEmails(folder: String? = nil, isUnreadOnly: Bool = false) async throws -> [PATEmail] {
+        var urlString = "\(baseURL)/pat/emails?limit=50"
+        if let folder = folder {
+            urlString += "&folder=\(folder)"
+        }
+        if isUnreadOnly {
+            urlString += "&is_unread_only=true"
+        }
+        
+        guard let url = URL(string: urlString) else {
+            throw PATCoreError.invalidURL
+        }
+        
+        let (data, response) = try await session.data(from: url)
+        try validateResponse(response)
+        
+        let emailResponse = try JSONDecoder().decode(EmailResponse.self, from: data)
+        return emailResponse.emails ?? []
+    }
+    
+    func syncEmails() async throws -> [String: Any] {
+        guard let url = URL(string: "\(baseURL)/pat/emails/sync") else {
+            throw PATCoreError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+    
+    func getEmailAnalytics() async throws -> EmailAnalytics? {
+        guard let url = URL(string: "\(baseURL)/pat/emails/analytics") else {
+            throw PATCoreError.invalidURL
+        }
+        
+        let (data, response) = try await session.data(from: url)
+        try validateResponse(response)
+        
+        let analyticsResponse = try JSONDecoder().decode(EmailAnalyticsResponse.self, from: data)
+        return analyticsResponse.analytics
+    }
+    
+    func sendEmail(recipient: String, subject: String, body: String) async throws {
+        var components = URLComponents(string: "\(baseURL)/pat/emails/send")!
+        components.queryItems = [
+            URLQueryItem(name: "recipient", value: recipient),
+            URLQueryItem(name: "subject", value: subject),
+            URLQueryItem(name: "body", value: body)
+        ]
+        
+        guard let url = components.url else {
+            throw PATCoreError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let (_, response) = try await session.data(for: request)
+        try validateResponse(response)
+    }
+    
+    func classifyEmail(id: UUID) async throws {
+        guard let url = URL(string: "\(baseURL)/pat/emails/\(id.uuidString)/classify") else {
+            throw PATCoreError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let (_, response) = try await session.data(for: request)
+        try validateResponse(response)
+    }
+    
+    func archiveEmail(id: UUID) async throws {
+        guard let url = URL(string: "\(baseURL)/pat/emails/\(id.uuidString)/archive") else {
+            throw PATCoreError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let (_, response) = try await session.data(for: request)
+        try validateResponse(response)
+    }
+    
     // MARK: - Helpers
     
     private func validateResponse(_ response: URLResponse) throws {

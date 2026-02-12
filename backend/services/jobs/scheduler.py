@@ -8,7 +8,7 @@ import os
 from typing import List, Dict
 
 # Job service is imported inside the function to avoid circular imports
-from .notification_service import NotificationService, MockNotificationService
+from notification_service import NotificationService, MockNotificationService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -53,8 +53,10 @@ class JobSearchScheduler:
             logger.info("Starting daily government job search...")
 
             # Search for government jobs - dynamic import to avoid circular imports
-            from app import job_service, JobSearchRequest
+            from core.job_service import JobSearchService
+            from models.job_listing import JobSearchRequest
 
+            job_service = JobSearchService()
             search_request = JobSearchRequest(
                 keywords="government secret clearance senior software engineer backend java spring boot aws",
                 location="remote",
