@@ -67,7 +67,8 @@ class ProcessManager: ObservableObject {
             }
         } catch {
             services[index].status = .error(error.localizedDescription)
-            appendLog("Error starting \(service.name): \(error.localizedDescription)")
+            appendLog("CRITICAL ERROR starting \(service.name): \(error.localizedDescription)")
+            appendLog("Note: If you see 'Permission Denied', disable 'App Sandbox' in Xcode.")
         }
     }
     

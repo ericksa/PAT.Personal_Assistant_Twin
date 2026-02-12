@@ -25,6 +25,8 @@ struct PATManagerApp: App {
             }
         }
         
+        // MenuBarExtra is temporarily disabled to troubleshoot startup ViewBridge issues
+        /*
         MenuBarExtra("PAT", systemImage: "brain.head.profile") {
             Button("Control Center") {
                 NSApp.activate(ignoringOtherApps: true)
@@ -49,6 +51,7 @@ struct PATManagerApp: App {
                 NSApplication.shared.terminate(nil)
             }
         }
+        */
     }
 }
 

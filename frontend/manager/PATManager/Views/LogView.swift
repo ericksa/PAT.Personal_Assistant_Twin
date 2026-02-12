@@ -31,11 +31,10 @@ struct LogView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .id("logBottom")
                 }
-                .onChange(of: filteredLogs) { oldValue, newValue in
+                .onChange(of: manager.combinedLogs) { oldValue, newValue in
+                    // Only scroll if we are looking at the whole log or if new logs arrive
                     DispatchQueue.main.async {
-                        withAnimation {
-                            proxy.scrollTo("logBottom", anchor: .bottom)
-                        }
+                        proxy.scrollTo("logBottom", anchor: .bottom)
                     }
                 }
             }

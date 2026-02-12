@@ -32,6 +32,7 @@ struct PATService: Identifiable {
         PATService(id: "mcp", name: "MCP Server", description: "Multi-Chain Planning & RAG orchestration", port: 8003, pythonModule: "services.mcp.app", scriptPath: nil),
         PATService(id: "whisper", name: "Whisper Service", description: "Voice transcription and audio processing", port: 8004, pythonModule: "services.whisper.app", scriptPath: nil),
         PATService(id: "teleprompter", name: "Teleprompter", description: "Interview UI and display service", port: 8005, pythonModule: "services.teleprompter.app", scriptPath: nil),
-        PATService(id: "jobs", name: "Job Search", description: "Automated job crawling and classification", port: 8007, pythonModule: "services.jobs.app", scriptPath: nil)
+        PATService(id: "jobs", name: "Job Search", description: "Automated job crawling and classification", port: 8007, pythonModule: "services.jobs.app", scriptPath: nil),
+        PATService(id: "listening", name: "Interview Listener", description: "Live audio capture and transcription", port: nil, pythonModule: nil, scriptPath: "services/listening/live_interview_listener.py")
     ]
 }

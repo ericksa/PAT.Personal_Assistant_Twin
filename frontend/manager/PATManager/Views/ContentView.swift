@@ -30,8 +30,10 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .status) {
                 HStack {
-                    StatusIndicator(isRunning: manager.services.contains { $0.status.isRunning })
-                    Text(manager.services.filter { $0.status.isRunning }.count == manager.services.count ? "All Systems Active" : "Partial System Load")
+                    Circle()
+                        .fill(manager.services.contains { $0.status.isRunning } ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text("System Status")
                         .font(.caption)
                 }
             }
