@@ -56,39 +56,21 @@ class SyncStatus(str, Enum):
 class CalendarEventCreate(BaseModel):
     """Model for creating a new calendar event"""
 
-    title: str = Field(
-        ..., description="Event title", examples=["Team Standup", "Client Meeting"]
-    )
-    description: Optional[str] = Field(None, description="Event description")
-    location: Optional[str] = Field(
-        None, description="Event location", examples=["Conference Room A", "Remote"]
-    )
-    start_time: datetime = Field(..., description="Event start time")
-    end_time: datetime = Field(..., description="Event end time")
-    all_day: bool = Field(default=False, description="Is this an all-day event?")
-    recurrence_rule: Optional[str] = Field(
-        None, description="iCal RRULE format", examples=["FREQ=WEEKLY;BYDAY=MO,WE,FR"]
-    )
-    timezone: Optional[str] = Field(
-        None, description="Event timezone", examples=["America/New_York"]
-    )
-    calendar_name: str = Field(default="Adam", description="Which Apple calendar")
-    event_type: EventType = Field(
-        default=EventType.MEETING, description="Type of event"
-    )
-    status: EventStatus = Field(
-        default=EventStatus.CONFIRMED, description="Event status"
-    )
-    priority: int = Field(default=0, ge=0, le=10, description="Priority level (0-10)")
-    travel_time_minutes: int = Field(
-        default=0, ge=0, description="Travel time before event"
-    )
-    requires_preparation: bool = Field(
-        default=False, description="Does event need preparation?"
-    )
-    preparation_minutes: int = Field(
-        default=15, ge=0, description="Preparation time needed"
-    )
+    title: str = Field(..., min_length=1, max_length=500)
+    description: Optional[str] = None
+    location: Optional[str] = None
+    start_time: datetime
+    end_time: datetime
+    all_day: bool = False
+    recurrence_rule: Optional[str] = None
+    timezone: Optional[str] = None
+    calendar_name: str = "Adam"
+    event_type: EventType = EventType.MEETING
+    status: EventStatus = EventStatus.CONFIRMED
+    priority: int = 0
+    travel_time_minutes: int = 0
+    requires_preparation: bool = False
+    preparation_minutes: int = 15
 
     model_config = {
         "json_schema_extra": {
@@ -109,8 +91,8 @@ class CalendarEventCreate(BaseModel):
 class CalendarEvent(BaseModel):
     """Full calendar event model"""
 
-    id: Optional[UUID] = Field(None, description="Event ID")
-    external_event_id: Optional[str] = Field(None, description="Apple Calendar ID")
+    id: Optional[UUID] = None
+    external_event_id: Optional[str] = None
     title: str
     description: Optional[str] = None
     location: Optional[str] = None
@@ -130,10 +112,10 @@ class CalendarEvent(BaseModel):
     last_synced_at: Optional[datetime] = None
     ai_processed: bool = False
     ai_summary: Optional[str] = None
-    ai_suggestions: List[Dict[str, Any]] = Field(default_factory=list)
+    ai_suggestions: List[Dict[str, Any]] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = {}
 
 
 class ConflictCreate(BaseModel):

@@ -12,7 +12,7 @@ from src.models.email import (
 class EmailRepository(BaseRepository):
     """Repository for email operations in PostgreSQL"""
 
-    async def create_email(self, email: EmailCreate) -> dict:
+    async def create_email(self, email: EmailCreate) -> Optional[Dict[str, Any]]:
         """Create a new email"""
         query = """
             INSERT INTO emails (
@@ -49,13 +49,13 @@ class EmailRepository(BaseRepository):
             email.read,
             email.flagged,
             email.folder,
-            email.category,
+            str(email.category.value) if email.category else None,
             email.priority,
             email.summary,
         )
-        return dict(result) if result else {}
+        return dict(result) if result else None
 
-    async def get_email(self, email_id: str) -> Optional[dict]:
+    async def get_email(self, email_id: str) -> Optional[Dict[str, Any]]:
         """Get an email by ID"""
         query = "SELECT * FROM emails WHERE id = $1"
         result = await self.fetchrow(query, email_id)
@@ -63,7 +63,7 @@ class EmailRepository(BaseRepository):
 
     async def get_email_by_external_id(
         self, external_id: str, user_id: str
-    ) -> Optional[dict]:
+    ) -> Optional[Dict[str, Any]]:
         """Get an email by External Message ID"""
         query = "SELECT * FROM emails WHERE external_message_id = $1 AND user_id = $2"
         result = await self.fetchrow(query, external_id, user_id)
@@ -79,10 +79,10 @@ class EmailRepository(BaseRepository):
         category: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[dict]:
+    ) -> List[Dict[str, Any]]:
         """List emails with optional filters"""
         conditions = ["user_id = $1"]
-        params = [user_id]
+        params: List[Any] = [user_id]
         param_idx = 2
 
         if folder:
@@ -122,10 +122,12 @@ class EmailRepository(BaseRepository):
         results = await self.fetch(query, *params)
         return [dict(r) for r in results]
 
-    async def update_email(self, email_id: str, email: EmailUpdate) -> Optional[dict]:
+    async def update_email(
+        self, email_id: str, email: EmailUpdate
+    ) -> Optional[Dict[str, Any]]:
         """Update an email"""
         updates = []
-        params = []
+        params: List[Any] = []
         param_idx = 1
 
         # Use model_dump to get values
@@ -144,7 +146,13 @@ class EmailRepository(BaseRepository):
                 "summary",
             ]:
                 updates.append(f"{key} = ${param_idx}")
-                params.append(value)
+                # Handle Enum
+                if key == "category" and value:
+                    params.append(
+                        str(value.value) if hasattr(value, "value") else str(value)
+                    )
+                else:
+                    params.append(value)
                 param_idx += 1
 
         if not updates:

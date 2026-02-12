@@ -85,3 +85,13 @@ class WebSocketManager:
         except Exception as e:
             logger.error(f"Failed to send message to client {client_id}: {e}")
             self.disconnect(client_id)
+
+    # Convenience broadcast methods
+    async def broadcast_calendar_event(self, event_data: dict) -> None:
+        await self.broadcast({"type": "calendar_event", "data": event_data})
+
+    async def broadcast_email_notification(self, email_data: dict) -> None:
+        await self.broadcast({"type": "email_notification", "data": email_data})
+
+    async def broadcast_task_reminder(self, task_data: dict) -> None:
+        await self.broadcast({"type": "task_reminder", "data": task_data})

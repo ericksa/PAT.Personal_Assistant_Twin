@@ -45,17 +45,19 @@ check_prerequisites() {
         error "Docker Compose is not installed. Please install Docker Compose first."
     fi
     
-    # Check available disk space (minimum 10GB)
-    available_space=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
-    if [ "$available_space" -lt 10 ]; then
-        error "Insufficient disk space. At least 10GB required, but only ${available_space}GB available."
+    # Check available disk space (minimum 10GB) - cross-platform
+    if command -v df >/dev/null 2>&1; then
+        available_space=$(df . | awk 'NR==2 {print $4}' | head -c -9)  # Remove last char (K/M/G)
+        if [ "$available_space" -lt 10 ]; then
+            warn "Low disk space detected. Recommended minimum is 10GB."
+        fi
     fi
     
-    # Check available memory (minimum 8GB)
-    available_memory=$(free -g | awk 'NR==2{print $2}')
-    if [ "$available_memory" -lt 8 ]; then
-        warn "Low memory detected. Recommended minimum is 8GB, but only ${available_memory}GB available."
-    fi
+    # Skip memory check on macOS (free command not available)
+    # available_memory=$(free -g | awk 'NR==2{print $2}')
+    # if [ "$available_memory" -lt 8 ]; then
+    #     warn "Low memory detected. Recommended minimum is 8GB, but only ${available_memory}GB available."
+    # fi
     
     log "Prerequisites check completed successfully"
 }

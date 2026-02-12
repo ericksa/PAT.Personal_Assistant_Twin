@@ -7,7 +7,7 @@ from src.models.task import TaskCreate, TaskUpdate
 class TaskRepository(BaseRepository):
     """Repository for task operations in PostgreSQL"""
 
-    async def create_task(self, task: TaskCreate) -> dict:
+    async def create_task(self, task: TaskCreate) -> Optional[Dict[str, Any]]:
         """Create a new task"""
         query = """
             INSERT INTO tasks (
@@ -18,39 +18,47 @@ class TaskRepository(BaseRepository):
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING *
         """
-        # Note: task might be a Pydantic model or a dict
-        if hasattr(task, "model_dump"):
-            data = task.model_dump()
-        else:
-            data = task
-
-        return await self.fetchrow(
-            query,
-            data.get("user_id", "00000000-0000-0000-0000-000000000001"),
-            data.get("title"),
-            data.get("description"),
-            data.get("due_date"),
-            data.get("due_time"),
-            data.get("priority", 0),
-            data.get("status", "pending"),
-            data.get("reminder_date"),
-            data.get("source", "pat"),
-            data.get("list_name", "Reminders"),
-            data.get("estimated_duration_minutes"),
-            data.get("tags", []),
+        # Access attributes directly from Pydantic model
+        user_id = (
+            str(task.user_id)
+            if task.user_id
+            else "00000000-0000-0000-0000-000000000001"
         )
 
-    async def get_task(self, task_id: str) -> Optional[dict]:
+        result = await self.fetchrow(
+            query,
+            user_id,
+            task.title,
+            task.description,
+            task.due_date,
+            task.due_time,
+            task.priority,
+            str(task.status.value)
+            if hasattr(task.status, "value")
+            else str(task.status),
+            task.reminder_date,
+            str(task.source.value)
+            if hasattr(task.source, "value")
+            else str(task.source),
+            task.list_name,
+            task.estimated_duration_minutes,
+            task.tags,
+        )
+        return dict(result) if result else None
+
+    async def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Get a task by ID"""
         query = "SELECT * FROM tasks WHERE id = $1"
-        return await self.fetchrow(query, task_id)
+        result = await self.fetchrow(query, task_id)
+        return dict(result) if result else None
 
     async def get_task_by_external_id(
         self, external_id: str, user_id: str
-    ) -> Optional[dict]:
+    ) -> Optional[Dict[str, Any]]:
         """Get a task by Apple Reminders ID"""
         query = "SELECT * FROM tasks WHERE external_task_id = $1 AND user_id = $2"
-        return await self.fetchrow(query, external_id, user_id)
+        result = await self.fetchrow(query, external_id, user_id)
+        return dict(result) if result else None
 
     async def list_tasks(
         self,
@@ -62,10 +70,10 @@ class TaskRepository(BaseRepository):
         is_overdue: bool = False,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[dict]:
+    ) -> List[Dict[str, Any]]:
         """List tasks with optional filters"""
         conditions = ["user_id = $1"]
-        params = [user_id]
+        params: List[Any] = [user_id]
         param_idx = 2
 
         if status:
@@ -102,12 +110,15 @@ class TaskRepository(BaseRepository):
         """
         params.extend([limit, offset])
 
-        return await self.fetch(query, *params)
+        results = await self.fetch(query, *params)
+        return [dict(r) for r in results]
 
-    async def update_task(self, task_id: str, task: TaskUpdate) -> Optional[dict]:
+    async def update_task(
+        self, task_id: str, task: TaskUpdate
+    ) -> Optional[Dict[str, Any]]:
         """Update a task"""
         updates = []
-        params = []
+        params: List[Any] = []
         param_idx = 1
 
         data = task.model_dump(exclude_unset=True)
@@ -125,34 +136,37 @@ class TaskRepository(BaseRepository):
                 "tags",
             ]:
                 updates.append(f"{key} = ${param_idx}")
-                params.append(value)
+                # Handle Enum
+                if key in ["status", "priority"] and value and hasattr(value, "value"):
+                    params.append(value.value)
+                else:
+                    params.append(value)
                 param_idx += 1
 
                 if key == "status" and value == "completed":
-                    updates.append(f"completed_at = NOW()")
+                    updates.append("completed_at = NOW()")
 
         if not updates:
             return await self.get_task(task_id)
 
-        updates.append("updated_at = NOW()")
         params.append(task_id)
-
         query = f"""
             UPDATE tasks
-            SET {", ".join(updates)}
+            SET {", ".join(updates)}, updated_at = NOW()
             WHERE id = ${param_idx}
             RETURNING *
         """
 
-        return await self.fetchrow(query, *params)
+        result = await self.fetchrow(query, *params)
+        return dict(result) if result else None
 
     async def delete_task(self, task_id: str) -> bool:
         """Delete a task"""
         query = "DELETE FROM tasks WHERE id = $1"
         result = await self.execute(query, task_id)
-        return result == "DELETE 1"
+        return "DELETE 1" in result
 
-    async def get_overdue_tasks(self, user_id: str) -> List[dict]:
+    async def get_overdue_tasks(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all overdue tasks"""
         query = """
             SELECT * FROM tasks
@@ -161,9 +175,10 @@ class TaskRepository(BaseRepository):
               AND status != 'completed'
             ORDER BY due_date ASC
         """
-        return await self.fetch(query, user_id)
+        results = await self.fetch(query, user_id)
+        return [dict(r) for r in results]
 
-    async def get_today_tasks(self, user_id: str) -> List[dict]:
+    async def get_today_tasks(self, user_id: str) -> List[Dict[str, Any]]:
         """Get tasks due today"""
         query = """
             SELECT * FROM tasks
@@ -172,4 +187,5 @@ class TaskRepository(BaseRepository):
               AND status != 'completed'
             ORDER BY priority DESC, due_time ASC NULLS LAST
         """
-        return await self.fetch(query, user_id)
+        results = await self.fetch(query, user_id)
+        return [dict(r) for r in results]

@@ -1,10 +1,11 @@
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
+from uuid import UUID
 
 from src.repositories.task_repo import TaskRepository
 from src.repositories.calendar_repo import CalendarRepository
-from src.models.task import TaskCreate, TaskUpdate
+from src.models.task import TaskCreate, TaskUpdate, TaskStatus, TaskSource
 from src.services.llm_service import LlamaLLMService
 from src.utils.applescript.base_manager import AppleScriptManager
 
@@ -26,9 +27,14 @@ class TaskService:
         self.llm_service = llm_service
         self.applescript = applescript_manager
 
-    async def sync_from_reminders(self, user_id: str, limit: int = 100) -> dict:
+    async def sync_from_reminders(self, user_id_str: str, limit: int = 100) -> dict:
         """Sync tasks from Apple Reminders to database"""
         result = {"synced": 0, "errors": 0, "message": "Starting sync..."}
+        user_id = (
+            UUID(user_id_str)
+            if user_id_str
+            else UUID("00000000-0000-0000-0000-000000000001")
+        )
 
         try:
             # Simple script to get reminder names and IDs
@@ -53,12 +59,12 @@ class TaskService:
             for apple_id in apple_ids[:limit]:
                 # Check if already exists
                 existing = await self.task_repo.get_task_by_external_id(
-                    apple_id, user_id
+                    apple_id, str(user_id)
                 )
                 if existing:
                     continue
 
-                await self.sync_single_reminder(user_id, apple_id)
+                await self.sync_single_reminder(str(user_id), apple_id)
                 result["synced"] += 1
 
             result["message"] = f"Synced {result['synced']} new reminders"
@@ -70,8 +76,9 @@ class TaskService:
 
         return result
 
-    async def sync_single_reminder(self, user_id: str, apple_id: str):
+    async def sync_single_reminder(self, user_id_str: str, apple_id: str):
         """Sync a single reminder from Apple Reminders"""
+        user_id = UUID(user_id_str) if user_id_str else None
         script = f"""
         tell application "Reminders"
             set reminderRef to first reminder whose id is "{apple_id}"
@@ -99,9 +106,11 @@ class TaskService:
                 external_task_id=apple_id,
                 title=data.get("name", "Untitled Task"),
                 description=data.get("notes", ""),
-                status="completed" if data.get("completed") == "true" else "pending",
+                status=TaskStatus.COMPLETED
+                if data.get("completed") == "true"
+                else TaskStatus.PENDING,
                 priority=int(data.get("priority", 0)),
-                source="apple_reminders",
+                source=TaskSource.APPLE_REMINDERS,
             )
 
             await self.task_repo.create_task(task_create)
@@ -109,19 +118,17 @@ class TaskService:
     async def suggest_priorities(self, user_id: str) -> dict:
         """AI-based task priority suggestions"""
         tasks = await self.task_repo.list_tasks(
-            user_id=user_id, status="pending", limit=50
+            user_id=user_id, status=TaskStatus.PENDING.value, limit=50
         )
 
         suggestions = []
 
         for task in tasks:
-            # In a real implementation, we would batch these or use more sophisticated logic
-            # For now, we'll just return a mock or simple logic
             suggestions.append(
                 {
-                    "task_id": task["id"],
-                    "title": task["title"],
-                    "suggested_priority": min(task["priority"] + 1, 10),
+                    "task_id": str(task.get("id", "")),
+                    "title": str(task.get("title", "")),
+                    "suggested_priority": min(int(task.get("priority", 0)) + 1, 10),
                     "reason": "AI suggested higher priority based on content",
                 }
             )
@@ -137,14 +144,15 @@ class TaskService:
             return {"error": "Task not found"}
 
         updated = await self.task_repo.update_task(
-            task_id, TaskUpdate(status="completed", completion_notes=notes)
+            task_id, TaskUpdate(status=TaskStatus.COMPLETED, completion_notes=notes)
         )
 
         # Sync back to Apple Reminders if it came from there
-        if task.get("external_task_id"):
+        external_id = task.get("external_task_id")
+        if external_id:
             script = f"""
             tell application "Reminders"
-                set reminderRef to first reminder whose id is "{task["external_task_id"]}"
+                set reminderRef to first reminder whose id is "{external_id}"
                 set completed of reminderRef to true
                 if "{notes or ""}" is not "" then
                     set notes of reminderRef to "{notes}"

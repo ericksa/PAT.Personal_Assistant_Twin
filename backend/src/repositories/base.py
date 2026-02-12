@@ -1,9 +1,12 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TypeVar, Generic
 from abc import ABC, abstractmethod
 import asyncpg
 
+# Generic type for models
+T = TypeVar("T")
 
-class BaseRepository(ABC):
+
+class BaseRepository(Generic[T]):
     """Base repository with common database operations"""
 
     def __init__(self, db_helper):
@@ -38,7 +41,8 @@ class BaseRepository(ABC):
     async def get_by_id(self, table: str, id_value: str) -> Optional[Dict[str, Any]]:
         """Generic get by ID operation"""
         query = f"SELECT * FROM {table} WHERE id = $1"
-        return await self.fetchrow(query, id_value)
+        result = await self.fetchrow(query, id_value)
+        return dict(result) if result else None
 
     async def update(
         self, table: str, id_value: str, data: Dict[str, Any]
@@ -59,13 +63,14 @@ class BaseRepository(ABC):
             WHERE id = ${len(params)}
             RETURNING *
         """
-        return await self.fetchrow(query, *params)
+        result = await self.fetchrow(query, *params)
+        return dict(result) if result else None
 
     async def delete(self, table: str, id_value: str) -> bool:
         """Generic delete operation"""
         query = f"DELETE FROM {table} WHERE id = $1"
         result = await self.execute(query, id_value)
-        return result == "DELETE 1"
+        return "DELETE 1" in result
 
     async def list_all(
         self,
@@ -82,11 +87,12 @@ class BaseRepository(ABC):
                 ORDER BY created_at DESC
                 LIMIT $2 OFFSET $3
             """
-            return await self.fetch(query, user_id, limit, offset)
+            results = await self.fetch(query, user_id, limit, offset)
         else:
             query = f"""
                 SELECT * FROM {table}
                 ORDER BY created_at DESC
                 LIMIT $1 OFFSET $2
             """
-            return await self.fetch(query, limit, offset)
+            results = await self.fetch(query, limit, offset)
+        return [dict(r) for r in results]

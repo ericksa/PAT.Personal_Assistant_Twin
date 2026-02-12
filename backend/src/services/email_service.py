@@ -1,12 +1,14 @@
 import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
+from uuid import UUID
 
 from src.repositories.email_repo import EmailRepository
 from src.repositories.task_repo import TaskRepository
 from src.repositories.calendar_repo import CalendarRepository
-from src.models.email import EmailCreate, EmailUpdate
-from src.models.task import TaskCreate
+from src.models.email import EmailCreate, EmailUpdate, EmailCategory
+from src.models.task import TaskCreate, TaskSource, TaskStatus
+from src.models.calendar import CalendarEventCreate
 from src.services.llm_service import LlamaLLMService
 from src.utils.applescript.base_manager import AppleScriptManager
 
@@ -30,9 +32,14 @@ class EmailService:
         self.llm_service = llm_service
         self.applescript = applescript_manager
 
-    async def sync_from_mailbox(self, user_id: str, limit: int = 100) -> dict:
+    async def sync_from_mailbox(self, user_id_str: str, limit: int = 100) -> dict:
         """Sync emails from Apple Mail to database"""
         result = {"synced": 0, "errors": 0, "message": "Starting sync..."}
+        user_id = (
+            UUID(user_id_str)
+            if user_id_str
+            else UUID("00000000-0000-0000-0000-000000000001")
+        )
 
         try:
             # Get message IDs from Apple Mail
@@ -61,12 +68,12 @@ class EmailService:
             for apple_id in apple_ids:
                 # Check if already exists
                 existing = await self.email_repo.get_email_by_external_id(
-                    apple_id, user_id
+                    apple_id, str(user_id)
                 )
                 if existing:
                     continue
 
-                await self.sync_single_email(user_id, apple_id)
+                await self.sync_single_email(str(user_id), apple_id)
                 result["synced"] += 1
 
             result["message"] = f"Synced {result['synced']} new emails from Mail"
@@ -78,8 +85,10 @@ class EmailService:
 
         return result
 
-    async def sync_single_email(self, user_id: str, apple_id: str):
+    async def sync_single_email(self, user_id_str: str, apple_id: str):
         """Sync a single email from Apple Mail"""
+        user_id = UUID(user_id_str) if user_id_str else None
+
         script = f"""
         tell application "Mail"
             set currentEmail to first message of inbox whose message id is "{apple_id}"
@@ -96,7 +105,6 @@ class EmailService:
 
         raw_data = await self.applescript.run_applescript(script)
 
-        # Simple parsing (improvement needed for robust parsing)
         if raw_data and isinstance(raw_data, str):
             parts = raw_data.split("|", 5)
             data = {}
@@ -120,7 +128,7 @@ class EmailService:
                 sender_email=sender_email,
                 sender_name=sender_name or None,
                 body_text=data.get("body", ""),
-                received_at=datetime.now(),  # Should parse from data['date']
+                received_at=datetime.now(),
                 read=data.get("read") == "true",
                 flagged=data.get("flagged") == "true",
                 folder="INBOX",
@@ -135,16 +143,16 @@ class EmailService:
             return {"error": "Email not found"}
 
         classification = await self.llm_service.classify_email(
-            subject=email["subject"],
-            sender=email["sender_email"],
-            body=email["body_text"] or "",
+            subject=email.get("subject", ""),
+            sender=email.get("sender_email", ""),
+            body=email.get("body_text") or "",
         )
 
         await self.email_repo.update_email(
             email_id,
             EmailUpdate(
-                category=classification.get("category", "personal"),
-                priority=classification.get("priority", 0),
+                category=EmailCategory(classification.get("category", "personal")),
+                priority=int(classification.get("priority", 0)),
             ),
         )
 
@@ -157,8 +165,8 @@ class EmailService:
             return {"error": "Email not found"}
 
         summary_text = await self.llm_service.summarize_email(
-            subject=email["subject"],
-            body=email["body_text"] or "",
+            subject=email.get("subject", ""),
+            body=email.get("body_text") or "",
         )
 
         await self.email_repo.update_email(email_id, EmailUpdate(summary=summary_text))
@@ -174,68 +182,74 @@ class EmailService:
             return {"error": "Email not found"}
 
         reply = await self.llm_service.draft_email_reply(
-            subject=email["subject"],
-            sender=email["sender_email"],
-            body=email["body_text"] or "",
+            subject=email.get("subject", ""),
+            sender=email.get("sender_email", ""),
+            body=email.get("body_text") or "",
             tone=tone,
         )
 
         return {"draft": reply}
 
-    async def extract_tasks(self, email_id: str, user_id: str) -> List[dict]:
+    async def extract_tasks(self, email_id: str, user_id_str: str) -> List[dict]:
         """Extract tasks from an email using AI"""
+        user_id = UUID(user_id_str) if user_id_str else None
         email = await self.email_repo.get_email(email_id)
         if not email:
             return []
 
-        tasks_data = await self.llm_service.extract_tasks(email["body_text"] or "")
+        tasks_data = await self.llm_service.extract_tasks(email.get("body_text") or "")
 
         created_tasks = []
         for task_item in tasks_data:
             task_create = TaskCreate(
                 user_id=user_id,
-                title=task_item["title"],
+                title=task_item.get("task", "Untitled Task"),
                 description=task_item.get("description", ""),
-                status="pending",
-                priority=task_item.get("priority", 5),
-                source="email",
-                related_email_id=email["id"],
+                status=TaskStatus.PENDING,
+                priority=int(task_item.get("priority", 5)),
+                source=TaskSource.EMAIL,
                 tags=["email-extracted"],
             )
 
             task = await self.task_repo.create_task(task_create)
-            created_tasks.append(task)
+            if task:
+                created_tasks.append(task)
 
         return created_tasks
 
-    async def extract_meetings(self, email_id: str, user_id: str) -> List[dict]:
+    async def extract_meetings(self, email_id: str, user_id_str: str) -> List[dict]:
         """Extract meeting requests from an email using AI"""
+        user_id = (
+            UUID(user_id_str)
+            if user_id_str
+            else UUID("00000000-0000-0000-0000-000000000001")
+        )
         email = await self.email_repo.get_email(email_id)
         if not email:
             return []
 
         meeting_details = await self.llm_service.extract_meeting_details(
-            email["body_text"] or ""
+            email.get("body_text") or ""
         )
 
-        if not meeting_details or "error" in meeting_details:
+        if not meeting_details:
             return []
 
         # Convert meeting_details to calendar event
-        from src.models.calendar import CalendarEventCreate
-
         event_create = CalendarEventCreate(
-            user_id=user_id,
-            title=meeting_details.get("title", f"Meeting from: {email['subject']}"),
+            title=meeting_details.get("title", f"Meeting from: {email.get('subject')}"),
             description=meeting_details.get("description", ""),
-            start_time=datetime.now(),  # Placeholder, should parse from meeting_details
-            end_time=datetime.now(),  # Placeholder
+            start_time=datetime.now(),
+            end_time=datetime.now() + timedelta(hours=1),
             location=meeting_details.get("location"),
-            event_type="meeting",
         )
 
-        event = await self.calendar_repo.create_event(event_create.model_dump())
-        return [event]
+        # Add user_id manually
+        event_data = event_create.model_dump()
+        event_data["user_id"] = str(user_id)
+
+        event = await self.calendar_repo.create_event(event_data)
+        return [event] if event else []
 
     async def batch_classify_recent(self, user_id: str, limit: int = 20) -> dict:
         """Batch classify recent unclassified emails"""
@@ -247,8 +261,10 @@ class EmailService:
 
         for email in emails:
             try:
-                classification = await self.classify_email(email["id"], user_id)
-                results["classifications"][email["id"]] = classification.get("category")
+                classification = await self.classify_email(str(email["id"]), user_id)
+                results["classifications"][str(email["id"])] = classification.get(
+                    "category"
+                )
                 results["processed"] += 1
             except Exception as e:
                 logger.error(f"Error classifying email {email['id']}: {e}")

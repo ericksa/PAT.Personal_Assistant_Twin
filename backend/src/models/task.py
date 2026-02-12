@@ -75,15 +75,15 @@ class TaskCreate(BaseModel):
     user_id: Optional[UUID] = None
     external_task_id: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=500)
-    description: Optional[str] = Field(None, max_length=5000)
+    description: Optional[str] = None
     due_date: Optional[date] = None
-    due_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
-    priority: int = Field(default=0, ge=0, le=10)
+    due_time: Optional[str] = None
+    priority: int = 0
     status: TaskStatus = TaskStatus.PENDING
     reminder_date: Optional[datetime] = None
-    list_name: str = Field(default="Reminders")
-    estimated_duration_minutes: Optional[int] = Field(None, ge=0)
-    tags: List[str] = Field(default_factory=list)
+    list_name: str = "Reminders"
+    estimated_duration_minutes: Optional[int] = None
+    tags: List[str] = []
     source: TaskSource = TaskSource.PAT
 
 

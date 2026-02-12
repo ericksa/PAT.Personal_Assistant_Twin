@@ -15,11 +15,17 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Teleprompter Service")
 
+# Get the directory of the current script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
 # Serve static files for teleprompter frontend
-app.mount("/static", StaticFiles(directory="/app/static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 class BroadcastRequest(BaseModel):
     message: str
+
 
 class ConnectionManager:
     def __init__(self):
@@ -40,15 +46,17 @@ class ConnectionManager:
     async def broadcast(self, message: str):
         self.current_text = message
         disconnected = []
-        
+
         # Broadcast to all connected WebSocket clients
         for connection in self.active_connections:
             try:
-                await connection.send_json({
-                    "type": "text", 
-                    "content": message,
-                    "timestamp": str(asyncio.get_event_loop().time())
-                })
+                await connection.send_json(
+                    {
+                        "type": "text",
+                        "content": message,
+                        "timestamp": str(asyncio.get_event_loop().time()),
+                    }
+                )
             except Exception as e:
                 logger.error(f"WebSocket send error: {e}")
                 disconnected.append(connection)
@@ -57,7 +65,9 @@ class ConnectionManager:
         for connection in disconnected:
             self.disconnect(connection)
 
+
 manager = ConnectionManager()
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -71,36 +81,42 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+
 @app.post("/broadcast")
 async def broadcast_message(request: BroadcastRequest):
     """Endpoint for agent service to broadcast messages"""
     try:
         await manager.broadcast(request.message)
         return {
-            "status": "broadcasted", 
-            "message": request.message[:100] + "...", 
-            "connections": len(manager.active_connections)
+            "status": "broadcasted",
+            "message": request.message[:100] + "...",
+            "connections": len(manager.active_connections),
         }
     except Exception as e:
         logger.error(f"Broadcast error: {e}")
         return {"status": "error", "message": str(e)}
+
 
 @app.get("/")
 async def root():
     """Serve the teleprompter frontend"""
     return FileResponse("/app/static/index.html")
 
+
 @app.get("/display")
 async def display():
     """Direct link to the teleprompter display"""
     return FileResponse("/app/static/index.html")
 
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "connections": len(manager.active_connections)}
 
+
 # Keep server running
 if __name__ == "__main__":
     import uvicorn
+
     logger.info("Starting Teleprompter Service on port 8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)

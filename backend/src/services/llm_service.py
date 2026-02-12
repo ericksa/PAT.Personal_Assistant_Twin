@@ -44,7 +44,9 @@ class LlamaLLMService:
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": temperature or self.config.TEMPERATURE,
+                    "temperature": temperature
+                    if temperature is not None
+                    else self.config.TEMPERATURE,
                     "top_p": self.config.TOP_P,
                     "num_ctx": self.config.NUM_CTX_llama32_3b,
                 },
@@ -130,7 +132,7 @@ class LlamaLLMService:
         Returns:
             Parsed JSON dictionary
         """
-        response = ""
+        resp_text = ""
         try:
             # Add structured output instruction to prompt
             enhanced_prompt = f"""{prompt}
@@ -142,22 +144,22 @@ IMPORTANT: Respond in JSON format only."""
 Use this schema as a template:
 {json.dumps(schema, indent=2)}"""
 
-            response = await self._make_request(
+            resp_text = await self._make_request(
                 prompt=enhanced_prompt, system_prompt=system_prompt, format_json=True
             )
 
             # Parse the JSON response
-            result = json.loads(response)
+            result = json.loads(resp_text)
             return result
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse LLM JSON output: {e}")
             # Try to extract JSON from response if it's wrapped
-            if "{:" in response:
-                start = response.find("{:")
-                end = response.rfind("}") + 1
+            if "{:" in resp_text:
+                start = resp_text.find("{:")
+                end = resp_text.rfind("}") + 1
                 try:
-                    return json.loads(response[start:end])
+                    return json.loads(resp_text[start:end])
                 except:
                     logger.error(f"Failed to extract JSON from response")
             raise Exception(f"LLM did not return valid JSON: {e}")
@@ -277,7 +279,8 @@ Respond in JSON array:
 
         result = await self._make_request(prompt, format_json=True)
         try:
-            return json.loads(result)
+            res = json.loads(result)
+            return res if isinstance(res, list) else []
         except:
             return []
 
@@ -306,7 +309,7 @@ Respond in JSON, or "null" if this isn't a meeting."""
 
         result = await self._make_request(prompt, format_json=True)
 
-        if result.lower() == "null" or not result:
+        if not result or result.lower() == "null":
             return None
 
         try:

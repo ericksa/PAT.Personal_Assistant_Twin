@@ -11,33 +11,33 @@
 ## 🔴 HIGH PRIORITY
 
 ### Database Migration Fix
-- [ ] Fix `emails` table schema error in `scripts/migrations/002_add_pat_core_tables.sql`
-- [ ] Re-run migration to create `emails` table
-- [ ] Verify all 11 PAT Core tables created successfully
+- [x] Fix `emails` table schema error in `scripts/migrations/002_add_pat_core_tables.sql`
+- [x] Re-run migration to create `emails` table
+- [x] Verify all 11 PAT Core tables created successfully
 
 ### Sync Workers Implementation
-- [ ] Create `scripts/pat_sync_worker.py` with calendar/email/reminders workers
-- [ ] Implement AppleScript integration (graceful error handling)
-- [ ] Add logging to stdout + log file
+- [x] Create `scripts/pat_sync_worker.py` with calendar/email/reminders workers
+- [x] Implement AppleScript integration (graceful error handling)
+- [x] Add logging to stdout + log file
 - [ ] Configure error notifications (log + 1-time email until fixed)
 
 ### API Testing
-- [ ] Create `scripts/test_pat_api.sh` automated test suite
-- [ ] Test all 30+ PAT Core endpoints
-- [ ] Verify database persistence
-- [ ] Test LLM integration
+- [x] Create `scripts/test_pat_api.sh` automated test suite
+- [x] Test all 30+ PAT Core endpoints
+- [x] Verify database persistence
+- [x] Test LLM integration
 
 ### Sync Worker Startup Script
-- [ ] Create `scripts/start_sync_workers.sh` to start all workers
-- [ ] Add logging configuration
-- [ ] Test permission prompts (macOS)
+- [x] Create `scripts/start_sync_workers.sh` to start all workers
+- [x] Add logging configuration
+- [x] Test permission prompts (macOS)
 
 ---
 
 ## 🟡 MEDIUM PRIORITY
 
 ### PAT Core Service Stability
-- [ ] Update `README.md` with PAT Core service startup instructions
+- [x] Update `README.md` with PAT Core service startup instructions
 - [ ] Test PAT Core server start on boot
 - [ ] Monitor performance and memory usage
 
@@ -47,8 +47,8 @@
 - [ ] Add monitoring/metrics for PAT Core service
 
 ### Documentation
-- [ ] Create `backend/FRONTEND_API_REFERENCE.md` - API spec for future frontend communication
-- [ ] Update `README.md` with complete PAT system overview
+- [x] Create `backend/FRONTEND_API_REFERENCE.md` - API spec for future frontend communication
+- [x] Update `README.md` with complete PAT system overview
 
 ---
 
@@ -84,40 +84,27 @@
 
 ---
 
-## Completed (2026-02-11)
+## Completed (2026-02-12)
 
 ### Database & Infrastructure
-- [x] Create PAT Core database migration script (`scripts/migrations/002_add_pat_core_tables.sql`)
-- [x] Apply database migration (10/11 tables created successfully)
-- [x] Create user table with single-user setup
-- [x] Create calendar events table with AI fields
-- [x] Create tasks table with Apple Reminders integration
-- [x] Create business entities and documents tables
+- [x] Fix `emails` table schema error in migration script
+- [x] Re-run migration and verify all 11 PAT Core tables
+- [x] Rename legacy `tasks` table to avoid conflict with PAT Core
 
-### Core Services
-- [x] Create calendar service with conflict detection
-- [x] Create service layer abstraction
-- [x] Implement AppleScript integration framework
-- [x] Test AppleScript calendar access (successfully lists calendars)
-
-### Dependencies & Configuration
-- [x] Update asyncpg dependency from 0.29.0 to ~=0.30.0
-- [x] Rename default calendar from "Adam" to "PAT-cal"
-- [x] Create logging configuration with structured output
-- [x] Set up PAT Core API with 30+ endpoints
+### Core Services & Repositories
+- [x] Restore `BaseRepository` (asyncpg version)
+- [x] Implement `EmailRepository` and `TaskRepository`
+- [x] Implement `EmailService` and `TaskService`
+- [x] Update `AppleScriptManager` with generic execution class
 
 ### API Implementation
-- [x] Calendar CRUD endpoints
-- [x] Email AI features (classify, summarize, draft reply, extract tasks/meetings)
-- [x] Task management endpoints (CRUD, prioritization)
-- [x] Chat/LLM endpoints (Llama 3.2 3B integration)
-- [x] Health and system info endpoints
+- [x] Restore 30+ endpoints in `src/api/pat_routes.py` (CRUD + AI)
+- [x] Merge WebSocket endpoints with REST endpoints
 
-### Testing & Verification
-- [x] Test PAT Core API startup (successful)
-- [x] Test LLM connection to Ollama (successful)
-- [x] Test AppleScript calendar integration (successful)
-- [x] Verify PostgreSQL connectivity
+### Sync & Automation
+- [x] Create `scripts/pat_sync_worker.py` for automated background sync
+- [x] Create `scripts/start_sync_workers.sh` for easy startup
+- [x] Create `scripts/test_pat_api.sh` for automated testing
 
 ---
 
