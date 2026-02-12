@@ -15,6 +15,11 @@ from src.models.calendar import (
     ConflictType,
     ConflictSeverity,
 )
+from src.api.pat_routes import (
+    broadcast_calendar_event,
+    broadcast_email_notification,
+    broadcast_task_reminder,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +32,11 @@ class CalendarService:
 
     def __init__(
         self,
-        calendar_repo: CalendarRepository = None,
-        llm_service: LlamaLLMService = None,
+        calendar_repo: CalendarRepository,
+        llm_service: LlamaLLMService,
     ):
-        self.calendar_repo = calendar_repo or CalendarRepository()
-        self.llm_service = llm_service or LlamaLLMService()
+        self.calendar_repo = calendar_repo
+        self.llm_service = llm_service
 
     async def create_event(
         self, event_data: Dict[str, Any], check_conflicts: bool = True
@@ -95,11 +100,14 @@ class CalendarService:
                     new_start = updates.get("start_time", event.get("start_time"))
                     new_end = updates.get("end_time", event.get("end_time"))
 
-                    conflicts = await self.calendar_repo.detect_conflicts(
-                        start_time=new_start,
-                        end_time=new_end,
-                        exclude_event_id=event_id,
-                    )
+                    if new_start and new_end:
+                        conflicts = await self.calendar_repo.detect_conflicts(
+                            start_time=new_start,
+                            end_time=new_end,
+                            exclude_event_id=event_id,
+                        )
+                    else:
+                        conflicts = []
 
                     if conflicts:
                         logger.info(f"Update causes {len(conflicts)} conflicts")
@@ -137,6 +145,7 @@ class CalendarService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         status: Optional[str] = None,
+        user_id: str = DEFAULT_USER_ID,
     ) -> List[Dict[str, Any]]:
         """
         Get events with optional date range and status filters.
@@ -241,12 +250,14 @@ class CalendarService:
 
             # Return suggestion as list with multiple potential times
             # (For now returning AI's single suggestion)
+            suggested_time = suggestion.get("suggested_time")
+            if not suggested_time:
+                return []
+
             return [
                 {
-                    "start_time": suggestion.get("suggested_time"),
-                    "end_time": self._add_minutes(
-                        suggestion.get("suggested_time"), duration_minutes
-                    ),
+                    "start_time": suggested_time,
+                    "end_time": self._add_minutes(suggested_time, duration_minutes),
                     "confidence": suggestion.get("confidence", 0.7),
                     "reasoning": suggestion.get("reasoning", ""),
                 }
@@ -286,7 +297,9 @@ class CalendarService:
         ]
 
     async def optimize_schedule(
-        self, target_date: date = None
+        self,
+        target_date: date = date.today() + timedelta(days=1),
+        user_id: str = DEFAULT_USER_ID,
     ) -> OptimizationSuggestion:
         """
         AI-powered daily schedule optimization.
@@ -305,7 +318,9 @@ class CalendarService:
             end_of_day = datetime.combine(target_date, datetime.max.time())
 
             # Get existing events
-            current_events = await self.get_events(start_of_day, end_of_day)
+            current_events = await self.get_events(
+                start_of_day, end_of_day, user_id=user_id
+            )
 
             events_for_ai = [
                 {
@@ -328,7 +343,7 @@ class CalendarService:
                 preferences=preferences.model_dump(),
             )
 
-            return OptimizationSuggestion(
+            suggestion = OptimizationSuggestion(
                 date=target_date,
                 current_events=[CalendarEvent(**e) for e in current_events],
                 suggested_changes=optimization.get("suggested_changes", []),
@@ -336,6 +351,13 @@ class CalendarService:
                 confidence=optimization.get("confidence", 0.0),
                 potential_conflicts_resolved=0,
             )
+
+            # Broadcast optimization suggestion
+            await broadcast_calendar_event(
+                {"type": "optimization_suggestion", "data": suggestion.model_dump()}
+            )
+
+            return suggestion
 
         except Exception as e:
             logger.error(f"Failed to optimize schedule: {e}")

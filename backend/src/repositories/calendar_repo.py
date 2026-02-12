@@ -94,8 +94,58 @@ class CalendarRepository:
             logger.error(f"Failed to get event {event_id}: {e}")
             raise
 
+    async def get_events(
+        self,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        status: Optional[str] = None,
+        user_id: str = "00000000-0000-0000-0000-000000000001",
+    ) -> List[Dict[str, Any]]:
+        """
+        Get events with optional filters.
+
+        Args:
+            start_date: Optional start date
+            end_date: Optional end date
+            status: Optional status filter
+            user_id: User ID filter
+
+        Returns:
+            List of events
+        """
+        try:
+            query = "SELECT * FROM calendar_events WHERE user_id = $1"
+            values = [user_id]
+
+            if start_date:
+                query += " AND start_time >= $2"
+                values.append(start_date)
+
+            if end_date:
+                param_num = len(values) + 1
+                query += f" AND end_time <= ${param_num}"
+                values.append(end_date)
+
+            if status:
+                param_num = len(values) + 1
+                query += f" AND status = ${param_num}"
+                values.append(status)
+
+            query += " ORDER BY start_time ASC"
+
+            results = await sql_helper.execute(query, *values, fetch="all")
+            return [self._row_to_dict(row) for row in results]
+
+        except Exception as e:
+            logger.error(f"Failed to get events: {e}")
+            raise
+
     async def get_events_by_date_range(
-        self, start_date: datetime, end_date: datetime, status: Optional[str] = None
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        status: Optional[str] = None,
+        user_id: str = "00000000-0000-0000-0000-000000000001",
     ) -> List[Dict[str, Any]]:
         """
         Get events within date range.
@@ -112,11 +162,12 @@ class CalendarRepository:
             query = """
             SELECT * FROM calendar_events
             WHERE start_time >= $1 AND start_time <= $2
+            AND user_id = $3
             """
-            values = [start_date, end_date]
+            values = [start_date, end_date, user_id]
 
             if status:
-                query += " AND status = $3"
+                query += " AND status = $4"
                 values.append(status)
 
             query += " ORDER BY start_time ASC"

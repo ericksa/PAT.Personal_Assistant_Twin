@@ -5,6 +5,29 @@
 - Documentation (Swagger): `http://localhost:8010/docs`
 - Documentation (ReDoc): `http://localhost:8010/redoc`
 
+## WebSocket
+
+### Connection
+- **URL**: `ws://localhost:8010/pat/ws`
+- **Purpose**: Real-time updates for calendar events, email notifications, and task reminders.
+
+### Message Format
+All WebSocket messages are JSON-formatted:
+```json
+{
+  "type": "message_type",
+  "data": { ... }
+}
+```
+
+### Message Types
+| Type                     | Description                          | Data Example                                                                                     |
+|--------------------------|--------------------------------------|--------------------------------------------------------------------------------------------------|
+| `calendar_event`         | Calendar event updates               | `{"type": "created", "event": {...}}`                                                     |
+| `optimization_suggestion`| AI schedule optimization suggestions  | `{"date": "2026-02-12", "suggested_changes": [...], "reasoning": "..."}`              |
+| `email_notification`     | New email or classification          | `{"subject": "...", "sender": "...", "summary": "...", "classification": "..."}` |
+| `task_reminder`          | Task reminders or updates            | `{"title": "...", "due_date": "...", "priority": "..."}`                            |
+
 ## Authentication
 Currently: None (single-user setup)
 User ID: `00000000-0000-0000-0000-000000000001`

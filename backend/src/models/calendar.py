@@ -219,6 +219,9 @@ class OptimizationSuggestion(BaseModel):
     reasoning: str
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     potential_conflicts_resolved: int = 0
+    user_id: Optional[str] = Field(
+        default=None, description="User ID for the optimization"
+    )
 
 
 class SyncResult(BaseModel):

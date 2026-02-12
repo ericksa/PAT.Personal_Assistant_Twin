@@ -2,6 +2,7 @@ import SwiftUI
 import os.log
 import Combine
 import UniformTypeIdentifiers
+import Foundation
 
 final class ChatViewModel: ObservableObject {
     // MARK: - Published properties
@@ -28,7 +29,11 @@ final class ChatViewModel: ObservableObject {
     // Add session service instance
     private let sessionService = SessionService.shared
     private let logger = SharedLogger.shared
-
+    
+    // Track listening service process
+    private var listeningServiceProcess: Process?
+    @Published public var isListeningActive: Bool = false
+    
     // MARK: - Service Health Methods
     
     /// Check if all required services are healthy
@@ -43,7 +48,7 @@ final class ChatViewModel: ObservableObject {
     
     /// Check the status of all services
     public func checkAllServices() async {
-        // TODO: Implement actual service health checks
+        // Perform health checks by querying Agent and Ollama services
         // For now, simulate checking services using AgentService
         do {
             let healthStatus = try await AgentService.shared.checkHealth()
@@ -57,7 +62,7 @@ final class ChatViewModel: ObservableObject {
                 self.agentHealthDetails = nil
             }
         }
-        
+
         // Check Ollama service separately
         do {
             _ = try await LLMService.shared.listModels()
@@ -68,6 +73,82 @@ final class ChatViewModel: ObservableObject {
             await MainActor.run {
                 self.ollamaStatus = .disconnected
             }
+        }
+    }
+
+    // MARK: - Listening Service Management
+
+    /// Start the listening service (live interview listener Python script)
+    public func startListeningService() {
+        guard !isListeningActive else {
+            logger.general.info("Listening service already active, skipping start")
+            return
+        }
+
+        let path = "/Users/adamerickson/Projects/PAT/backend/services/listening/live_interview_listener.py"
+        let scriptURL = URL(fileURLWithPath: path)
+
+        guard FileManager.default.fileExists(atPath: scriptURL.path) else {
+            logger.general.error("Listening service script not found at: \(path)")
+            Task { @MainActor in
+                self.errorMessage = "Listening service script not found"
+            }
+            return
+        }
+
+        // Find python3 path
+        let pythonPath = "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: pythonPath)
+        process.arguments = [scriptURL.path]
+
+        do {
+            try process.run()
+            listeningServiceProcess = process
+            logger.general.info("Started listening service with PID: \(process.processIdentifier)")
+            Task { @MainActor in
+                self.isListeningActive = true
+            }
+        } catch {
+            logger.general.error("Failed to start listening service: \(error.localizedDescription)")
+            Task { @MainActor in
+                self.errorMessage = "Failed to start listening service: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Stop the listening service
+    public func stopListeningService() {
+        guard let process = listeningServiceProcess,
+              process.isRunning else {
+            logger.general.info("No active listening service to stop")
+            Task { @MainActor in
+                self.isListeningActive = false
+                self.listeningServiceProcess = nil
+            }
+            return
+        }
+
+        logger.general.info("Stopping listening service (PID: \(process.processIdentifier))")
+        process.terminate()
+
+        // Wait for the process to exit
+        process.waitUntilExit()
+        logger.general.info("Listening service stopped successfully")
+
+        Task { @MainActor in
+            self.isListeningActive = false
+            self.listeningServiceProcess = nil
+        }
+    }
+
+    /// Toggle listening service state
+    public func toggleListeningService() {
+        if isListeningActive {
+            stopListeningService()
+        } else {
+            startListeningService()
         }
     }
     

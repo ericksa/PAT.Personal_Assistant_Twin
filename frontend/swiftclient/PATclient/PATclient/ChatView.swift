@@ -58,8 +58,12 @@ struct ChatView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 12) {
-                        Button(action: { launchTeleprompter() }) {
+                        Button(action: { viewModel.toggleListeningService() }) {
                             Image(systemName: "ear")
+                                .foregroundColor(viewModel.isListeningActive ? .green : .secondary)
+                        }
+                        Button(action: { launchTeleprompter() }) {
+                            Image(systemName: "rectangle.and.pencil.and.ellipsis")
                         }
                         Button(action: { showingSettings = true }) {
                             Image(systemName: "gearshape")
@@ -70,6 +74,12 @@ struct ChatView: View {
             .task {
                 await viewModel.initialHealthCheck()
                 await loadSessionsAsync()
+            }
+            .onDisappear {
+                viewModel.stopListeningService()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .appWillTerminate)) { _ in
+                viewModel.stopListeningService()
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView(viewModel: viewModel)

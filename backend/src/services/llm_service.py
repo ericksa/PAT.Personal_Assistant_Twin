@@ -393,8 +393,9 @@ Respond in JSON array or [] if no conflicts."""
     async def optimize_daily_schedule(
         self,
         date: str,
-        current_schedule: List[Dict[str, Any]],
+        current_schedule: List[Dict[str, str]],
         preferences: Dict[str, Any],
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         AI-powered daily schedule optimization.

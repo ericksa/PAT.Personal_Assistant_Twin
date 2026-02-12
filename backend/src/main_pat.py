@@ -4,7 +4,7 @@ import os
 import logging
 
 # Import the app factory function
-from src.api.pat_routes import router as pat_router
+from src.api.pat_routes import router as pat_router, websocket_manager
 from src.config.logging_config import setup_logging
 
 # Set up structured logging
