@@ -4,8 +4,24 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from uuid import UUID
+import os
 
 logger = logging.getLogger(__name__)
+
+# Global database helper instance
+_db_helper = None
+
+
+def get_db_helper() -> AsyncSQLHelper:
+    """Get or create database helper instance"""
+    global _db_helper
+    if _db_helper is None:
+        # Get database URL from environment or use default
+        database_url = os.getenv(
+            "DATABASE_URL", "postgresql://llm:llm@localhost:5432/llm"
+        )
+        _db_helper = AsyncSQLHelper(database_url)
+    return _db_helper
 
 
 class AsyncSQLHelper:
