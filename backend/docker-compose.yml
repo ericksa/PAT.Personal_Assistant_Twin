@@ -89,11 +89,11 @@ services:
       MINIO_URL: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      EMBEDDING_MODEL: BAAI/bge-base-en-v1.5
-      CHUNK_SIZE: 800
-      CHUNK_OVERLAP: 120
+      EMBEDDING_MODEL: bge-m3:latest
+      CHUNK_SIZE: 1000
+      CHUNK_OVERLAP: 100
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+      OLLAMA_EMBEDDING_MODEL: bge-m3:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,6 +138,12 @@ services:
       - ./data/docs:/data/docs             # Documentation files
     ports:
       - "8002:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # ----------------------------
   # MCP Server (Multi-Chain Planning + ReAct + RAG)
@@ -158,6 +164,7 @@ services:
       # LLM Configuration
       LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      PAT_CORE_URL: http://host.docker.internal:8010
       # Application Settings
       PYTHONPATH: /app
       PYTHONUNBUFFERED: 1
@@ -276,10 +283,10 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change_me}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_SERVER_ROOT_URL: http://localhost:3001
       GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
     ports:
-      - "3000:3000"
+      - "3001:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning

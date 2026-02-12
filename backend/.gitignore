@@ -56,10 +56,12 @@ data/models/*
 data/documents/*
 !data/documents/.gitkeep
 
-# Test files in root
+# Test files in root (should be in tests/ directory)
 *.pyc
 pat_*.py
-test_*.py
+*_test.py
+*test.py
+benchmark_performance.py
 simple_audio_test.py
 mic_requirements*.txt
 

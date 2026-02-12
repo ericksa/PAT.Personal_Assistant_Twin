@@ -1,50 +1,37 @@
-# Tests Directory
+# PAT Backend Tests
 
-This directory contains testing utilities and scripts for the PAT system.
+This directory contains all tests for the PAT backend application.
 
 ## Structure
 
-- **integration/** - End-to-end integration tests
-- **unit/** - Unit tests for individual components
-- **scripts/** - Manual testing scripts
+- `integration/` - Integration tests that test multiple components/services together
+  - `email_ai_test.py` - Tests for email AI functionality
+  - `direct_sync_test.py` - Tests for direct synchronization
+  - `icloud_sync_test.py` - Tests for iCloud synchronization
+  - `single_sync_test.py` - Tests for single-item synchronization
+  - `task_sync_test.py` - Tests for task synchronization
+- `unit/` - Unit tests for individual functions and classes
+- `performance testing/` - Performance and load testing
 
-## Usage
-
-### Integration Tests
-
-```bash
-# Quick system test
-python3 tests/pat_quick_test.py
-
-# Full demo with all services
-python3 tests/pat_demo.py
-```
-
-### Audio/Microphone Tests
+## Running Tests
 
 ```bash
-# Test microphone functionality
-python3 tests/test_microphone.py
+# Run all tests
+pytest
 
-# Alternative microphone test
-python3 tests/test_microphone_alt.py
+# Run integration tests only
+pytest tests/integration/
 
-# Simple audio test
-python3 tests/simple_audio_test.py
+# Run specific test file
+pytest tests/integration/email_ai_test.py
+
+# Run with coverage
+pytest --cov=src --cov-report=html
 ```
 
-### Dependencies
+## Adding New Tests
 
-Some tests require additional dependencies:
-```bash
-# Install test-specific requirements
-pip install -r tests/mic_requirements.txt
-# or
-pip install -r tests/mic_requirements_alt.txt
-```
-
-## Notes
-
-- Integration tests require all services to be running (`docker-compose up -d`)
-- Audio tests require microphone permissions
-- Tests are designed for local development and debugging
+1. Place unit tests in `tests/unit/`
+2. Place integration tests in `tests/integration/`
+3. Place performance tests in `tests/performance testing/`
+4. Follow the naming convention `test_<module>_<feature>.py`
