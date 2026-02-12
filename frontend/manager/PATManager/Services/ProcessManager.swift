@@ -8,7 +8,7 @@ class ProcessManager: ObservableObject {
     
     private var processes: [String: Process] = [:]
     private let backendPath = "/Users/adamerickson/Projects/PAT/backend"
-    private let pythonPath = "/usr/bin/python3"
+    private let pythonPath = "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
     
     func startService(_ serviceID: String) {
         guard let index = services.firstIndex(where: { $0.id == serviceID }) else { return }
@@ -93,7 +93,6 @@ class ProcessManager: ObservableObject {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         combinedLogs += "[\(timestamp)] \(message)\n"
         
-        // Keep logs manageable
         if combinedLogs.count > 50000 {
             combinedLogs = String(combinedLogs.suffix(25000))
         }

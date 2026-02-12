@@ -61,7 +61,7 @@ struct EmailsView: View {
                 }
             }
             .sheet(isPresented: $showingCompose) {
-                EmailComposeView()
+                EmailComposeView(viewModel: viewModel)
             }
             .onAppear {
                 Task { await viewModel.fetchEmails() }

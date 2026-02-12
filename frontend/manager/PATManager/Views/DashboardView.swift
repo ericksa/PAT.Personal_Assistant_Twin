@@ -10,7 +10,6 @@ struct DashboardView: View {
                 Text("System Dashboard")
                     .font(.system(size: 24, weight: .bold))
                 
-                // Voice Control Card
                 HStack {
                     VStack(alignment: .leading) {
                         Text("Voice Assistant")
@@ -36,7 +35,6 @@ struct DashboardView: View {
                 .background(Color.white.opacity(0.05))
                 .cornerRadius(12)
                 
-                // Quick Browser Links
                 HStack(spacing: 15) {
                     BrowserLinkCard(title: "Teleprompter", icon: "macwindow", url: "http://localhost:8005/display")
                     BrowserLinkCard(title: "Grafana", icon: "chart.bar.fill", url: "http://localhost:3000")

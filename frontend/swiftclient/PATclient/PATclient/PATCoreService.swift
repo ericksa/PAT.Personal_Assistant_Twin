@@ -148,21 +148,72 @@ class PATCoreService {
     }
     
     func completeTask(id: UUID, notes: String? = nil) async throws {
-        guard let url = URL(string: "\(baseURL)/pat/tasks/\(id.uuidString)/complete") else {
+        var urlString = "\(baseURL)/pat/tasks/\(id.uuidString)/complete"
+        if let notes = notes {
+            urlString += "?notes=\(notes.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        }
+        
+        guard let url = URL(string: urlString) else {
             throw PATCoreError.invalidURL
         }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let notes = notes {
-            let body = ["notes": notes]
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        }
         
         let (_, response) = try await session.data(for: request)
         try validateResponse(response)
+    }
+    
+    func getTaskAnalytics() async throws -> [String: Any] {
+        guard let url = URL(string: "\(baseURL)/pat/tasks/analytics") else {
+            throw PATCoreError.invalidURL
+        }
+        
+        let (data, response) = try await session.data(from: url)
+        try validateResponse(response)
+        
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+    
+    func getFocusTasks() async throws -> [PATTask] {
+        guard let url = URL(string: "\(baseURL)/pat/tasks/focus") else {
+            throw PATCoreError.invalidURL
+        }
+        
+        let (data, response) = try await session.data(from: url)
+        try validateResponse(response)
+        
+        let taskResponse = try JSONDecoder().decode(TaskResponse.self, from: data)
+        return taskResponse.tasks ?? []
+    }
+    
+    func syncTasks() async throws -> [String: Any] {
+        guard let url = URL(string: "\(baseURL)/pat/tasks/sync") else {
+            throw PATCoreError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+    
+    func suggestTaskPriorities() async throws -> [[String: Any]] {
+        guard let url = URL(string: "\(baseURL)/pat/tasks/suggest-priorities") else {
+            throw PATCoreError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return json?["suggestions"] as? [[String: Any]] ?? []
     }
     
     func batchCreateTasks(descriptions: [String]) async throws {

@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var manager = ProcessManager()
-    @StateObject private var voice = VoiceManager()
+    @EnvironmentObject var manager: ProcessManager
+    @EnvironmentObject var voice: VoiceManager
     @State private var selectedTab = "dashboard"
     
     var body: some View {
@@ -27,8 +27,6 @@ struct ContentView: View {
                 LogView()
             }
         }
-        .environmentObject(manager)
-        .environmentObject(voice)
         .toolbar {
             ToolbarItem(placement: .status) {
                 HStack {

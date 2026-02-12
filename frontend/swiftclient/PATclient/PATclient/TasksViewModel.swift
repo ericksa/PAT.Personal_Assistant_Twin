@@ -6,6 +6,7 @@ class TasksViewModel: ObservableObject {
     @Published var tasks: [PATTask] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var analytics: [String: Any] = [:]
     
     private let service = PATCoreService.shared
     
@@ -15,11 +16,41 @@ class TasksViewModel: ObservableObject {
         
         do {
             tasks = try await service.listTasks(status: status)
+            await fetchAnalytics()
         } catch {
             errorMessage = "Failed to load tasks: \(error.localizedDescription)"
         }
         
         isLoading = false
+    }
+    
+    func fetchAnalytics() async {
+        do {
+            analytics = try await service.getTaskAnalytics()
+        } catch {
+            print("Failed to fetch task analytics: \(error)")
+        }
+    }
+    
+    func syncTasks() async {
+        isLoading = true
+        do {
+            _ = try await service.syncTasks()
+            await fetchTasks()
+        } catch {
+            errorMessage = "Failed to sync tasks: \(error.localizedDescription)"
+        }
+        isLoading = false
+    }
+    
+    func suggestPriorities() async {
+        do {
+            let suggestions = try await service.suggestTaskPriorities()
+            // In a real app, you'd show these to the user or apply them
+            print("AI Priority Suggestions: \(suggestions)")
+        } catch {
+            errorMessage = "Failed to get AI suggestions: \(error.localizedDescription)"
+        }
     }
     
     func completeTask(_ task: PATTask) async {

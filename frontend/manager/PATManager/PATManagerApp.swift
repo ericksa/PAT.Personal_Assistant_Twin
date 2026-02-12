@@ -3,10 +3,13 @@ import SwiftUI
 @main
 struct PATManagerApp: App {
     @StateObject private var manager = ProcessManager()
+    @StateObject private var voice = VoiceManager()
     
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(manager)
+                .environmentObject(voice)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -25,7 +28,6 @@ struct PATManagerApp: App {
         MenuBarExtra("PAT", systemImage: "brain.head.profile") {
             Button("Control Center") {
                 NSApp.activate(ignoringOtherApps: true)
-                // In a real app, we'd ensure the window is open
             }
             
             Divider()

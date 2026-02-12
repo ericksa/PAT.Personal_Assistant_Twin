@@ -41,14 +41,23 @@ struct TasksView: View {
             .navigationTitle("Tasks")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingCreateTask = true }) {
-                        Image(systemName: "plus")
+                    HStack {
+                        Button(action: { 
+                            Task { await viewModel.suggestPriorities() }
+                        }) {
+                            Image(systemName: "sparkles")
+                        }
+                        .help("AI Priority Suggestions")
+                        
+                        Button(action: { showingCreateTask = true }) {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
                 ToolbarItem(placement: .navigation) {
                     Button(action: { 
                         Task {
-                            await viewModel.fetchTasks(status: selectedStatus)
+                            await viewModel.syncTasks()
                         }
                     }) {
                         Image(systemName: "arrow.clockwise")

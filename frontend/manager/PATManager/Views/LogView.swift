@@ -31,8 +31,12 @@ struct LogView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .id("logBottom")
                 }
-                .onChange(of: manager.combinedLogs) { _ in
-                    proxy.scrollTo("logBottom", anchor: .bottom)
+                .onChange(of: filteredLogs) { oldValue, newValue in
+                    DispatchQueue.main.async {
+                        withAnimation {
+                            proxy.scrollTo("logBottom", anchor: .bottom)
+                        }
+                    }
                 }
             }
             .background(Color.black)

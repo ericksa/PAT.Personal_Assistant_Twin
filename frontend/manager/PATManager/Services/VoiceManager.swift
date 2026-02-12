@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import SwiftUI
 
 class VoiceManager: NSObject, ObservableObject {
     @Published var isRecording = false
@@ -18,7 +19,6 @@ class VoiceManager: NSObject, ObservableObject {
     }
     
     private func startRecording() {
-        // macOS doesn't use AVAudioSession like iOS
         let url = getDocumentsDirectory().appendingPathComponent("recording.wav")
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
@@ -78,7 +78,6 @@ class VoiceManager: NSObject, ObservableObject {
     }
     
     private func notifyPAT(text: String) {
-        // Implementation for sending text to PAT Core API
         print("Heard: \(text)")
     }
     
