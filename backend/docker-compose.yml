@@ -140,6 +140,50 @@ services:
       - "8002:8000"
 
   # ----------------------------
+  # MCP Server (Multi-Chain Planning + ReAct + RAG)
+  # ----------------------------
+  mcp-server:
+    build: ./services/mcp
+    container_name: mcp-server
+    restart: unless-stopped
+    environment:
+      # Service URLs
+      INGEST_SERVICE_URL: http://ingest-service:8000
+      AGENT_SERVICE_URL: http://agent-service:8000
+      TELEPROMPTER_URL: http://teleprompter-app:8000
+      WHISPER_URL: http://whisper-service:8000
+      # Database & Cache
+      DATABASE_URL: postgresql://llm:llm@postgres:5432/llm
+      REDIS_URL: redis://redis:6379/0
+      # LLM Configuration
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # Application Settings
+      PYTHONPATH: /app
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      agent-service:
+        condition: service_started
+      ingest-service:
+        condition: service_started
+    volumes:
+      - ./data/models:/data/models
+      - ./data/documents:/data/documents
+      - ./data/uploads:/data/uploads
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ----------------------------
   # Teleprompter Service (On-Screen Display)
   # ----------------------------
   teleprompter-app:
