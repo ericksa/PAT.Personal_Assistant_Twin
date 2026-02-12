@@ -218,6 +218,94 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
         handler="mcp.handlers.action_handlers.web_search",
         category="action",
     ),
+    # PAT Core Calendar Tools
+    "pat_calendar_list": ToolDefinition(
+        name="pat_calendar_list",
+        description="List calendar events from PAT Core API",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "default": 50},
+                "start_date": {"type": "string"},
+            },
+        },
+        handler="mcp.handlers.pat_core_handlers.list_calendar_events",
+        category="pat_core",
+    ),
+    "pat_calendar_create": ToolDefinition(
+        name="pat_calendar_create",
+        description="Create a calendar event via PAT Core API",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "start_date": {"type": "string"},
+                "end_date": {"type": "string"},
+                "start_time": {"type": "string"},
+                "end_time": {"type": "string"},
+            },
+        },
+        handler="mcp.handlers.pat_core_handlers.create_calendar_event",
+        category="pat_core",
+    ),
+    "pat_calendar_sync": ToolDefinition(
+        name="pat_calendar_sync",
+        description="Sync with Apple Calendar via PAT Core",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "calendar_name": {"type": "string", "default": "PAT-cal"},
+                "hours_back": {"type": "integer", "default": 72},
+            },
+        },
+        handler="mcp.handlers.pat_core_handlers.sync_calendar",
+        category="pat_core",
+    ),
+    # PAT Core Task Tools
+    "pat_task_list": ToolDefinition(
+        name="pat_task_list",
+        description="List tasks from PAT Core API",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "priority": {"type": "string"},
+                "limit": {"type": "integer", "default": 50},
+            },
+        },
+        handler="mcp.handlers.pat_core_handlers.list_tasks",
+        category="pat_core",
+    ),
+    "pat_task_create": ToolDefinition(
+        name="pat_task_create",
+        description="Create a task via PAT Core API",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "priority": {"type": "string", "default": "medium"},
+                "tags": {"type": "array"},
+            },
+        },
+        handler="mcp.handlers.pat_core_handlers.create_task",
+        category="pat_core",
+    ),
+    # PAT Core Email Tool
+    "pat_email_process": ToolDefinition(
+        name="pat_email_process",
+        description="Process and classify email using PAT Core AI",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string"},
+                "body": {"type": "string"},
+                "sender": {"type": "string"},
+            },
+        },
+        handler="mcp.handlers.pat_core_handlers.process_email",
+        category="pat_core",
+    ),
 }
 
 

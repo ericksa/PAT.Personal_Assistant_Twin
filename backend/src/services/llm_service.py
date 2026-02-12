@@ -13,16 +13,16 @@ logger = logging.getLogger(__name__)
 class LlamaLLMService:
     """Service for interacting with Llama 3.2 3B via Ollama"""
 
-    def __init__(self, config: LLMConfig = None):
+    def __init__(self, config: Optional[LLMConfig] = None):
         self.config = config or LLMConfig()
         self.client = httpx.AsyncClient(timeout=120.0)
 
     async def _make_request(
         self,
         prompt: str,
-        system_prompt: str = None,
-        temperature: float = None,
-        max_tokens: int = None,
+        system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
         format_json: bool = False,
     ) -> str:
         """
@@ -83,7 +83,7 @@ class LlamaLLMService:
             raise
 
     async def chat_completion(
-        self, messages: List[Dict[str, str]], temperature: float = None
+        self, messages: List[Dict[str, str]], temperature: Optional[float] = None
     ) -> str:
         """
         Get chat completion from LLM.
@@ -114,7 +114,10 @@ class LlamaLLMService:
         )
 
     async def completion_with_structured_output(
-        self, prompt: str, system_prompt: str = None, schema: Dict[str, Any] = None
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        schema: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Get structured JSON output from LLM.
@@ -127,6 +130,7 @@ class LlamaLLMService:
         Returns:
             Parsed JSON dictionary
         """
+        response = ""
         try:
             # Add structured output instruction to prompt
             enhanced_prompt = f"""{prompt}
@@ -189,9 +193,18 @@ Determine if email requires action (true/false).
 Respond in JSON:
 {{"category": "...", "priority": 0-10, "requires_action": true/false, "reasoning": "..."}}"""
 
-        return await self._make_request(
+        result_str = await self._make_request(
             prompt=prompt, system_prompt=system_prompt, format_json=True
         )
+        try:
+            return json.loads(result_str)
+        except:
+            return {
+                "category": "personal",
+                "priority": 0,
+                "requires_action": False,
+                "reasoning": "Error parsing LLM response",
+            }
 
     async def summarize_email(self, subject: str, body: str) -> str:
         """
@@ -212,7 +225,7 @@ Summary:"""
         sender: str,
         body: str,
         tone: str = "professional",
-        context: str = None,
+        context: Optional[str] = None,
     ) -> str:
         """
         Draft reply to email.
@@ -344,15 +357,22 @@ Respond in JSON:
 {{"suggested_time": "YYYY-MM-DD HH:MM", "confidence": 0.0-1.0, "reasoning": "..."}}"""
 
         result = await self._make_request(prompt, format_json=True)
-        return (
-            json.loads(result)
-            if result
-            else {
+        try:
+            return (
+                json.loads(result)
+                if result
+                else {
+                    "suggested_time": None,
+                    "confidence": 0.0,
+                    "reasoning": "Unable to determine",
+                }
+            )
+        except:
+            return {
                 "suggested_time": None,
                 "confidence": 0.0,
-                "reasoning": "Unable to determine",
+                "reasoning": "Error parsing response",
             }
-        )
 
     async def detect_conflicts_upcoming(
         self, events: List[Dict[str, Any]], days_ahead: int = 7
@@ -427,16 +447,24 @@ Respond in JSON:
 {{"optimization_summary": "...", "suggested_changes": [{{"event": "...", "change": "...", "reason": "..."}}], "new_schedule": [...], "reasoning": "..."}}"""
 
         result = await self._make_request(prompt, format_json=True)
-        return (
-            json.loads(result)
-            if result
-            else {
-                "optimization_summary": "No changes needed",
+        try:
+            return (
+                json.loads(result)
+                if result
+                else {
+                    "optimization_summary": "No changes needed",
+                    "suggested_changes": [],
+                    "new_schedule": current_schedule,
+                    "reasoning": "",
+                }
+            )
+        except:
+            return {
+                "optimization_summary": "Error parsing optimization",
                 "suggested_changes": [],
                 "new_schedule": current_schedule,
-                "reasoning": "",
+                "reasoning": "Parse error",
             }
-        )
 
     # ===== TASK AI FEATURES =====
 
@@ -467,14 +495,17 @@ Respond in JSON:
 {{"task_index_0": 0-10, "task_index_1": 0-10, ...}}"""
 
         result = await self._make_request(prompt, format_json=True)
-        priorities = json.loads(result)
+        try:
+            priorities = json.loads(result)
+        except:
+            priorities = {}
 
         # Map back to task IDs
         task_priorities = {}
         for i, task in enumerate(tasks):
             key = f"task_index_{i}"
             if key in priorities:
-                task_priorities[task.get("id", i)] = priorities[key]
+                task_priorities[str(task.get("id", i))] = int(priorities[key])
 
         return task_priorities
 
@@ -511,12 +542,16 @@ Respond in JSON array of task titles in optimal order:
         try:
             order = json.loads(result)
             # Map titles back to IDs
-            title_to_id = {t.get("title"): t.get("id") for t in tasks}
+            title_to_id = {
+                str(t.get("title")): str(t.get("id")) for t in tasks if t.get("id")
+            }
             return [
                 title_to_id.get(title, title) for title in order if title in title_to_id
             ]
         except:
-            return [t.get("id") for t in tasks]  # Return original order as fallback
+            return [
+                str(t.get("id")) for t in tasks if t.get("id")
+            ]  # Return original order as fallback
 
     # ===== GENERAL =====
 

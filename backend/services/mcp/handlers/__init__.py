@@ -9,6 +9,14 @@ from .action_handlers import (
     broadcast_teleprompter,
     web_search,
 )
+from .pat_core_handlers import (
+    list_calendar_events,
+    create_calendar_event,
+    sync_calendar,
+    list_tasks,
+    create_task,
+    process_email,
+)
 
 __all__ = [
     # RAG handlers
@@ -28,4 +36,11 @@ __all__ = [
     "process_interview",
     "broadcast_teleprompter",
     "web_search",
+    # PAT Core handlers
+    "list_calendar_events",
+    "create_calendar_event",
+    "sync_calendar",
+    "list_tasks",
+    "create_task",
+    "process_email",
 ]

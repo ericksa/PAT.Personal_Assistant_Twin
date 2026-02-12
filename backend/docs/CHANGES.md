@@ -4,6 +4,31 @@
 
 This document outlines all the changes, fixes, and improvements made to the PAT (Personal Assistant Twin) system to make it fully operational.
 
+## 🆕 New Capabilities Added (Feb 12, 2026)
+
+### Enterprise Services Layer
+Added a comprehensive enterprise services layer with six new microservices:
+
+1. **APAT Service** (Automation Prompt & Analytics Toolkit) - Orchestrator for document generation with LLM assistance
+2. **BFF Service** (Backend for Frontend) - GraphQL API gateway for frontend applications
+3. **RAG Scoring Engine** - Market opportunity scoring and analysis engine
+4. **Market Data Ingestion Service** - Automated market data collection and processing
+5. **Document Generation Service** - Professional document generation with templating
+6. **Push Notification Service** - Real-time alerts for market opportunities
+
+### Extended Database Schema
+Added new database tables to support enterprise functionality:
+
+- Users & Preferences management
+- Calendar events with advanced scheduling
+- Email processing and classification
+- Task management with AI integration
+- Business intelligence (entities, documents, wearable data)
+- AI suggestions and predictions
+
+### Enhanced MCP Tool Registry
+Extended the MCP tool registry with PAT Core integration tools for calendar, tasks, and email processing.
+
 ## 🔧 Technical Fixes Applied
 
 ### 1. Ollama Integration Fixes

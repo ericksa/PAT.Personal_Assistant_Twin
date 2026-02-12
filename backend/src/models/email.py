@@ -33,9 +33,11 @@ class SyncStatusEmail(str, Enum):
 class EmailCreate(BaseModel):
     """Model for creating a new email record"""
 
+    user_id: Optional[UUID] = None
     external_message_id: Optional[str] = Field(
         None, description="Apple Mail Message-ID"
     )
+    thread_id: Optional[str] = None
     subject: str
     sender_email: str = Field(..., description="Sender email address")
     sender_name: Optional[str] = Field(None, description="Sender name")
@@ -50,6 +52,11 @@ class EmailCreate(BaseModel):
     body_html: Optional[str] = None
     account_name: str = Field(default="Apple Mail")
     folder: str = Field(default="INBOX")
+    read: bool = False
+    flagged: bool = False
+    category: Optional[EmailCategory] = None
+    priority: int = 0
+    summary: Optional[str] = None
 
     model_config = {
         "json_schema_extra": {
@@ -126,6 +133,32 @@ class EmailThread(BaseModel):
     status: str = Field(default="active")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+class EmailUpdate(BaseModel):
+    """Model for updating an email record"""
+
+    subject: Optional[str] = None
+    read: Optional[bool] = None
+    flagged: Optional[bool] = None
+    important: Optional[bool] = None
+    category: Optional[EmailCategory] = None
+    priority: Optional[int] = Field(None, ge=0, le=10)
+    summary: Optional[str] = None
+    requires_action: Optional[bool] = None
+    body_text: Optional[str] = None
+    body_html: Optional[str] = None
+    folder: Optional[str] = None
+
+
+class EmailThreadUpdate(BaseModel):
+    """Model for updating an email thread"""
+
+    subject: Optional[str] = None
+    message_count: Optional[int] = None
+    status: Optional[str] = None
+    ai_summary: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
 
 
 class EmailClassification(BaseModel):

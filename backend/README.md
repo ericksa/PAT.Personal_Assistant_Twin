@@ -10,6 +10,7 @@ PAT (Personal Assistant Twin) is a privacy-focused AI system designed to help pr
 
 PAT uses a microservice architecture with the following components:
 
+Core Services:
 - **📡 Agent Service** (port 8002) - AI brain with RAG from your documents
 - **📥 Ingest Service** (port 8001) - Document processing and embeddings
 - **🎤 Whisper Service** (port 8004) - Audio transcription (interview questions)
@@ -18,13 +19,30 @@ PAT uses a microservice architecture with the following components:
 - **⚡ Redis** - Cache and session storage
 - **☁️ MinIO** - Object storage for documents
 
+Enterprise Services (Optional):
+- **🔧 APAT Service** (port 8010) - Automation Prompt & Analytics Toolkit
+- **🌐 BFF Service** (port 8020) - Backend for Frontend GraphQL API
+- **📊 RAG Scoring** (port 8030) - Market opportunity scoring engine
+- **📈 Market Ingest** (port 8040) - Market data ingestion service
+- **📄 Doc Generation** (port 8050) - Document generation service
+- **🔔 Push Notifications** (port 8060) - Real-time alert service
+
 ### Key Features
 
+Core Features:
 - 🔒 **100% Local Processing** - No data leaves your machine
 - 🤖 **DeepSeek-V3.1 Integration** - Powerful local LLM via Ollama
 - 📚 **RAG System** - Retrieves relevant info from your documents
 - 📺 **Real-time Teleprompter** - Professional answer display
 - 🎙️ **Whisper Transcription** - Converts speech to text
+
+Enterprise Features:
+- 🏢 **Calendar Management** - AI-enhanced scheduling and conflict resolution
+- 📧 **Email Processing** - Automatic classification and response suggestions
+- 📋 **Task Management** - Intelligent task prioritization and tracking
+- 📈 **Market Intelligence** - RAG scoring for business opportunities
+- 📄 **Document Generation** - Business plans, SOWs, RFPs with LLM assistance
+- 📊 **Business Analytics** - Insights from market and competitive data
 
 ## 🚀 Quick Start
 
@@ -66,6 +84,16 @@ docker-compose up -d
 docker ps | grep backend
 ```
 
+#### 3. Start Enterprise Services (Optional)
+For advanced business capabilities, start the enterprise services:
+```bash
+# Start enterprise services
+docker-compose -f docker-compose.enterprise.yml up -d
+
+# Verify enterprise services are running
+docker ps | grep enterprise
+```
+
 #### 3. Install Ollama Models
 ```bash
 # Install Ollama from https://ollama.com if not already installed
@@ -91,10 +119,16 @@ python3 pat_quick_test.py
 
 ### Access Points
 
+Core Services:
 - **Teleprompter**: http://localhost:8005
 - **OpenWebUI**: http://localhost:3000
 - **n8n Workflows**: http://localhost:5678
 - **MinIO Console**: http://localhost:9001
+
+Enterprise Services:
+- **GraphQL API**: http://localhost:8020/graphql
+- **APAT Service**: http://localhost:8010
+- **RAG Scoring**: http://localhost:8030
 
 ## 📖 Usage Guide
 
@@ -184,13 +218,21 @@ Access workflows at http://localhost:5678
 ```
 PAT/backend/
 ├── services/
-│   ├── agent/           # AI brain with RAG
-│   ├── ingest/          # Document processing
-│   ├── teleprompter/    # On-screen display
-│   └── whisper/         # Audio transcription
-├── data/               # Uploaded documents and models
-├── scripts/            # Helper scripts
-└── docker-compose.yml  # Service orchestration
+│   ├── agent/              # AI brain with RAG
+│   ├── ingest/             # Document processing
+│   ├── teleprompter/       # On-screen display
+│   ├── whisper/            # Audio transcription
+│   ├── apat/               # Automation Prompt & Analytics Toolkit
+│   ├── bff/                # Backend for Frontend GraphQL API
+│   ├── rag-scoring/        # RAG scoring engine
+│   ├── market-ingest/      # Market data ingestion
+│   ├── doc-generation/     # Document generation
+│   └── push-notifications/ # Push notification service
+├── data/                  # Uploaded documents and models
+├── scripts/               # Helper scripts
+├── docs/                  # Documentation
+├── docker-compose.yml     # Core service orchestration
+└── docker-compose.enterprise.yml  # Enterprise service orchestration
 ```
 
 ### Making Changes
@@ -379,6 +421,8 @@ MIT License - See [LICENSE](LICENSE) file for details.
 - [docs/FUTURE_ENHANCEMENTS.md](docs/FUTURE_ENHANCEMENTS.md) - Planned features
 - [CHANGES.md](docs/CHANGES.md) - Version history
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture details
+- [docs/new_capabilities.md](docs/new_capabilities.md) - New enterprise capabilities
+- [docs/ENTERPRISE_GUIDE.md](docs/ENTERPRISE_GUIDE.md) - Enterprise features guide
 
 ## 👥 Support
 

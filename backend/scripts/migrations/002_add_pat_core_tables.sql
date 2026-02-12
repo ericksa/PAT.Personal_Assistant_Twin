@@ -90,6 +90,24 @@ CREATE TABLE IF NOT EXISTS schedule_preferences (
 );
 
 -- ============================================
+-- EMAIL THREADS
+-- ============================================
+CREATE TABLE IF NOT EXISTS email_threads (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) DEFAULT '00000000-0000-0000-0000-000000000001',
+    thread_id VARCHAR(255) UNIQUE, -- Apple Mail thread identifier
+    subject TEXT,
+    last_message_at TIMESTAMP WITH TIME ZONE,
+    message_count INTEGER DEFAULT 0,
+    participants TEXT[], -- Email addresses
+    ai_summary TEXT, -- Thread summary from Llama 3.2
+    context JSONB DEFAULT '{}'::jsonb, -- Conversation context, entities extracted
+    status VARCHAR(20) DEFAULT 'active', -- active, resolved, needs_followup
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
 -- EMAILS
 -- ============================================
 CREATE TABLE IF NOT EXISTS emails (
@@ -120,30 +138,12 @@ CREATE TABLE IF NOT EXISTS emails (
     thread_id UUID REFERENCES email_threads(id),
     ai_processed BOOLEAN DEFAULT FALSE,
     ai_classified_at TIMESTAMP,
-    ai_suggested_reply DRAFT,
+    ai_suggested_reply TEXT,
     sync_status VARCHAR(20) DEFAULT 'synced',
     last_synced_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     metadata JSONB DEFAULT '{}'::jsonb
-);
-
--- ============================================
--- EMAIL THREADS
--- ============================================
-CREATE TABLE IF NOT EXISTS email_threads (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) DEFAULT '00000000-0000-0000-0000-000000000001',
-    thread_id VARCHAR(255) UNIQUE, -- Apple Mail thread identifier
-    subject TEXT,
-    last_message_at TIMESTAMP WITH TIME ZONE,
-    message_count INTEGER DEFAULT 0,
-    participants TEXT[], -- Email addresses
-    ai_summary TEXT, -- Thread summary from Llama 3.2
-    context JSONB DEFAULT '{}'::jsonb, -- Conversation context, entities extracted
-    status VARCHAR(20) DEFAULT 'active', -- active, resolved, needs_followup
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================

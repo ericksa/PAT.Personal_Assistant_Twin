@@ -1,0 +1,603 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # CORE INFRASTRUCTURE SERVICES
+  # ============================================
+
+  # ----------------------------
+  # PostgreSQL + pgvector
+  # ----------------------------
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: pgvector
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-llm}
+      POSTGRES_USER: ${POSTGRES_USER:-llm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-llm}
+    volumes:
+      - .scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - .scripts/init_enterprise.sql:/docker-entrypoint-initdb.d/init_enterprise.sql
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-llm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # Redis (cache, agent memory)
+  # ----------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # MinIO (Object Storage)
+  # ----------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-password123}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Console UI
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - pat-backend
+
+  # ============================================
+  # ENTERPRISE PLATFORM SERVICES
+  # ============================================
+
+  # ----------------------------
+  # APAT - Automation Prompt & Analytics Toolkit
+  # ----------------------------
+  apat-service:
+    build:
+      context: ./services/apat
+      dockerfile: Dockerfile
+    container_name: apat-service
+    restart: unless-stopped
+    environment:
+      # Database & Cache
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llm}:${POSTGRES_PASSWORD:-llm}@postgres:5432/${POSTGRES_DB:-llm}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      
+      # LLM Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4-turbo}
+      
+      # Job Scheduling
+      JOB_SCHEDULER_INTERVAL: 300  # 5 minutes
+      MAX_CONCURRENT_JOBS: 3
+      
+      # File Paths
+      TEMPLATES_PATH: /app/templates
+      OUTPUT_PATH: /app/output
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ./data/templates:/app/templates
+      - ./data/output:/app/output
+      - ./logs/apat:/app/logs
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # BFF - Backend for Frontend (API Gateway)
+  # ----------------------------
+  bff-service:
+    build:
+      context: ./services/bff
+      dockerfile: Dockerfile
+    container_name: bff-service
+    restart: unless-stopped
+    environment:
+      # Service URLs
+      APAT_SERVICE_URL: http://apat-service:8010
+      MCP_SERVICE_URL: http://mcp-server:8003
+      RAG_SCORING_URL: http://rag-scoring:8030
+      NEXT_ERP_URL: ${NEXT_ERP_URL:-}
+      
+      # Authentication
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      JWT_ALGORITHM: RS256
+      
+      # Database & Cache
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llm}:${POSTGRES_PASSWORD:-llm}@postgres:5432/${POSTGRES_DB:-llm}
+      REDIS_URL: redis://redis:6379/0
+      
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8080,http://localhost:5173}
+      
+      # API
+      PORT: 8020
+      
+    depends_on:
+      apat-service:
+        condition: service_started
+      mcp-server:
+        condition: service_started
+      rag-scoring:
+        condition: service_started
+    volumes:
+      - ./data/certs:/app/certs  # For JWT certificates
+    ports:
+      - "8020:8020"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # RAG Scoring Engine
+  # ----------------------------
+  rag-scoring:
+    build:
+      context: ./services/rag-scoring
+      dockerfile: Dockerfile
+    container_name: rag-scoring
+    restart: unless-stopped
+    environment:
+      # Database & Cache
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llm}:${POSTGRES_PASSWORD:-llm}@postgres:5432/${POSTGRES_DB:-llm}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      
+      # ML Models
+      MODEL_CACHE_PATH: /app/models
+      DEFAULT_MODEL: random-forest-v1
+      FEATURE_ENGINE_PATH: /app/features
+      
+      # Scoring Configuration
+      SCORING_BATCH_SIZE: 100
+      SCORING_INTERVAL: 3600  # 1 hour
+      RED_THRESHOLD: ${RED_THRESHOLD:-30}
+      AMBER_THRESHOLD: ${AMBER_THRESHOLD:-60}
+      
+      # External APIs
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+      CRUNCHBASE_API_KEY: ${CRUNCHBASE_API_KEY:-}
+      GOOGLE_TRENDS_API_KEY: ${GOOGLE_TRENDS_API_KEY:-}
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ./data/models:/app/models
+      - ./data/features:/app/features
+      - ./data/scoring-logs:/app/logs
+    ports:
+      - "8030:8030"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # Market Data Ingestion Service
+  # ----------------------------
+  market-ingest:
+    build:
+      context: ./services/market-ingest
+      dockerfile: Dockerfile
+    container_name: market-ingest
+    restart: unless-stopped
+    environment:
+      # Database & Cache
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llm}:${POSTGRES_PASSWORD:-llm}@postgres:5432/${POSTGRES_DB:-llm}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      
+      # External API Keys
+      CRUNCHBASE_API_KEY: ${CRUNCHBASE_API_KEY:-}
+      LINKEDIN_API_KEY: ${LINKEDIN_API_KEY:-}
+      SEC_API_KEY: ${SEC_API_KEY:-}
+      NEWS_API_KEY: ${NEWS_API_KEY:-}
+      
+      # Scraping Configuration
+      CONCURRENT_REQUESTS: 5
+      REQUEST_DELAY: 1
+      USER_AGENT: "MarketIntelBot/1.0"
+      
+      # Data Processing
+      NORMALIZATION_ENABLED: true
+      ENRICHMENT_ENABLED: true
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ./data/raw:/app/data/raw
+      - ./data/processed:/app/data/processed
+      - ./logs/market-ingest:/app/logs
+    ports:
+      - "8040:8040"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8040/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # Document Generation Service
+  # ----------------------------
+  doc-generation:
+    build:
+      context: ./services/doc-generation
+      dockerfile: Dockerfile
+    container_name: doc-generation
+    restart: unless-stopped
+    environment:
+      # Service URLs
+      APAT_SERVICE_URL: http://apat-service:8010
+      MCP_SERVICE_URL: http://mcp-server:8003
+      
+      # Database & Cache
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llm}:${POSTGRES_PASSWORD:-llm}@postgres:5432/${POSTGRES_DB:-llm}
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      
+      # PDF Generation
+      PDF_ENGINE: weasyprint
+      TEMPLATES_PATH: /app/templates
+      OUTPUT_PATH: /app/output
+      
+      # Document Types
+      SUPPORTED_TYPES: "business_plan,sow,rfp,proposal"
+      
+    depends_on:
+      apat-service:
+        condition: service_started
+      mcp-server:
+        condition: service_started
+    volumes:
+      - ./data/templates:/app/templates
+      - ./data/output:/app/output
+      - ./logs/doc-generation:/app/logs
+    ports:
+      - "8050:8050"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8050/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # Push Notification Service
+  # ----------------------------
+  push-notifications:
+    build:
+      context: ./services/push-notifications
+      dockerfile: Dockerfile
+    container_name: push-notifications
+    restart: unless-stopped
+    environment:
+      # Service URLs
+      RAG_SCORING_URL: http://rag-scoring:8030
+      
+      # Push Services
+      FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
+      APNS_PRIVATE_KEY: ${APNS_PRIVATE_KEY:-}
+      
+      # Notification Rules
+      RED_ALERT_ENABLED: true
+      AMBER_REMINDER_ENABLED: true
+      SCHEDULED_SUMMARY_ENABLED: true
+      
+      # Redis for Queue
+      REDIS_URL: redis://redis:6379/0
+      
+    depends_on:
+      rag-scoring:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      - ./data/push-config:/app/config
+    ports:
+      - "8060:8060"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8060/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - pat-backend
+
+  # ============================================
+  # EXISTING SERVICES (from original compose)
+  # ============================================
+
+  # ----------------------------
+  # MCP Server (Multi-Chain Planning + ReAct + RAG)
+  # ----------------------------
+  mcp-server:
+    build: ./services/mcp
+    container_name: mcp-server
+    restart: unless-stopped
+    environment:
+      # Service URLs
+      INGEST_SERVICE_URL: http://ingest-service:8000
+      AGENT_SERVICE_URL: http://agent-service:8000
+      TELEPROMPTER_URL: http://teleprompter-app:8000
+      WHISPER_URL: http://whisper-service:8000
+      # Database & Cache
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llm}:${POSTGRES_PASSWORD:-llm}@postgres:5432/${POSTGRES_DB:-llm}
+      REDIS_URL: redis://redis:6379/0
+      # LLM Configuration
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # Application Settings
+      PYTHONPATH: /app
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      agent-service:
+        condition: service_started
+      ingest-service:
+        condition: service_started
+    volumes:
+      - ./data/models:/app/models
+      - ./data/documents:/app/documents
+      - ./data/uploads:/app/uploads
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # Ingest Service
+  # ----------------------------
+  ingest-service:
+    build: ./services/ingest
+    container_name: ingest-service
+    restart: unless-stopped
+    environment:
+      HUGGINGFACE_HUB_TOKEN: ${HUGGINGFACE_HUB_TOKEN:-}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llm}:${POSTGRES_PASSWORD:-llm}@postgres:5432/${POSTGRES_DB:-llm}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      EMBEDDING_MODEL: BAAI/bge-base-en-v1.5
+      CHUNK_SIZE: 800
+      CHUNK_OVERLAP: 120
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ./data/uploads:/data/uploads       # Temp dev storage
+      - ./data/documents:/data/documents   # Permanent ingestion storage
+      - ./data/models:/data/models         # Local models
+    ports:
+      - "8001:8000"
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # Agent / RAG Service
+  # ----------------------------
+  agent-service:
+    build: ./services/agent
+    container_name: agent-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llm}:${POSTGRES_PASSWORD:-llm}@postgres:5432/${POSTGRES_DB:-llm}
+      REDIS_URL: redis://redis:6379/0
+
+      # LLM routing
+      LLM_PROVIDER: ollama # mlx          ollama
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+      # RAG
+      TOP_K: 5
+      SCORE_THRESHOLD: 0.2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./data/models:/data/models         # Local LLM models
+      - ./data/documents:/data/documents   # Access to stored docs
+      - ./data/data:/data/data             # Any metadata or additional structured data
+      - ./data/docs:/data/docs             # Documentation files
+    ports:
+      - "8002:8000"
+    networks:
+      - pat-backend
+
+  # ============================================
+  # MONITORING AND OBSERVABILITY
+  # ============================================
+
+  # ----------------------------
+  # Prometheus - Metrics Collection
+  # ----------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=90d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./docker/prometheus/rules:/etc/prometheus/rules
+      - prometheus-data:/prometheus
+    depends_on:
+      - rag-scoring
+      - bff-service
+      - apat-service
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # Grafana - Visualization & Dashboards
+  # ----------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change_me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - pat-backend
+
+  # ----------------------------
+  # Jaeger - Distributed Tracing
+  # ----------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # HTTP collector
+      - "14250:14250"  # gRPC collector
+    networks:
+      - pat-backend
+
+# ============================================
+# NETWORKING AND VOLUMES
+# ============================================
+
+networks:
+  pat-backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  miniodata:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  apat-data:
+    driver: local
+  bff-data:
+    driver: local
+  rag-scoring-data:
+    driver: local
+  market-ingest-data:
+    driver: local
+  doc-generation-data:
+    driver: local
+  push-notifications-data:
+    driver: local

@@ -103,7 +103,7 @@ async def retrieve_memory(key: str) -> Dict[str, Any]:
             }
 
         # Parse JSON
-        memory_data = json.loads(data or "{}")
+        memory_data = json.loads(str(data) if data else "{}")
 
         logger.info(f"Retrieved memory: {key}")
 
@@ -137,8 +137,8 @@ async def search_memory(query: str, limit: int = 5) -> Dict[str, Any]:
 
         logger.info(f"Searching memories for: {query}")
 
-        # Get all memory keys
-        memory_keys = redis_client.lrange("memory_keys", 0, -1) or []
+        # Get all memory keys - wrap with list() to ensure proper type
+        memory_keys = list(redis_client.lrange("memory_keys", 0, -1) or [])
 
         results = []
         query_lower = query.lower()
@@ -161,7 +161,8 @@ async def search_memory(query: str, limit: int = 5) -> Dict[str, Any]:
                 continue
 
             try:
-                memory_data = json.loads(data)
+                # Cast to str to satisfy type checker
+                memory_data = json.loads(str(data) if data else "{}")
                 value = memory_data.get("value", "")
 
                 # Check if query matches key or value
@@ -217,8 +218,9 @@ async def list_all_memories(limit: int = 100) -> Dict[str, Any]:
 
         logger.info("Listing all memories")
 
-        # Get all memory keys
-        memory_keys = redis_client.lrange("memory_keys", 0, limit - 1)
+        # Get all memory keys - wrap with list() to ensure proper type
+        _keys = redis_client.lrange("memory_keys", 0, limit - 1) or []
+        memory_keys: List[str] = list(_keys) if _keys else []
 
         memories = []
 
@@ -233,7 +235,8 @@ async def list_all_memories(limit: int = 100) -> Dict[str, Any]:
             data = redis_client.get(f"memory:{key}")
             if data:
                 try:
-                    memory_data = json.loads(data)
+                    # Cast to str to satisfy type checker
+                    memory_data = json.loads(str(data) if data else "{}")
                     memories.append(
                         {
                             "key": key,
@@ -273,8 +276,9 @@ async def delete_memory(key: str) -> Dict[str, Any]:
         # Delete memory
         redis_client.delete(f"memory:{key}")
 
-        # Remove from keys list
-        memory_keys = redis_client.lrange("memory_keys", 0, -1)
+        # Remove from keys list - wrap with list() to ensure proper type
+        _keys = redis_client.lrange("memory_keys", 0, -1) or []
+        memory_keys: List[str] = list(_keys) if _keys else []
         for key_entry in memory_keys:
             if key_entry.startswith(f"{key}|"):
                 redis_client.lrem("memory_keys", 0, key_entry)

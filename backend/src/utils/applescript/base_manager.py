@@ -108,6 +108,34 @@ end tell
         return []
 
 
+class AppleScriptManager:
+    """Manager for AppleScript operations"""
+
+    async def run_applescript(self, script: str, *args) -> Any:
+        """
+        Execute AppleScript command and return result.
+
+        Args:
+            script: AppleScript code (f-string template)
+            args: Arguments to format into script
+        """
+        formatted_script = script.format(*args) if args else script
+        result = execute_applescript(formatted_script)
+
+        # Try to parse as JSON if it looks like it
+        if result.startswith("{") or result.startswith("["):
+            try:
+                return json.loads(result)
+            except:
+                pass
+
+        # Split by comma if it looks like a list
+        if "," in result and not ":" in result:
+            return [x.strip() for x in result.split(",")]
+
+        return result
+
+
 if __name__ == "__main__":
     # Test listing calendars
     calendars = list_calendars()

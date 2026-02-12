@@ -72,6 +72,8 @@ class Task(BaseModel):
 class TaskCreate(BaseModel):
     """Model for creating a new task"""
 
+    user_id: Optional[UUID] = None
+    external_task_id: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=500)
     description: Optional[str] = Field(None, max_length=5000)
     due_date: Optional[date] = None
