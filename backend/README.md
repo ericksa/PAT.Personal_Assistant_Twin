@@ -1,10 +1,10 @@
 # PAT - Personal Assistant Twin
 
-**Your AI-powered interview assistant that helps you answer questions smoothly using your résumé and technical knowledge.**
+**Your AI-powered personal assistant that helps you ace interviews, manage your calendar, process emails, and handle tasks intelligently.**
 
 ## 🎯 System Overview
 
-PAT (Personal Assistant Twin) is a privacy-focused AI system designed to help professionals excel in technical interviews. It combines document retrieval, local LLM processing, and real-time teleprompter display to provide instant, personalized answers to interview questions.
+PAT (Personal Assistant Twin) is a privacy-focused AI system designed to help professionals excel in technical interviews while also managing daily productivity tasks. It combines document retrieval, local LLM processing, real-time teleprompter display, calendar management, email processing, and task automation to provide a comprehensive personal assistant.
 
 ### Architecture
 
@@ -15,12 +15,23 @@ Core Services:
 - **📥 Ingest Service** (port 8001) - Document processing and embeddings
 - **🎤 Whisper Service** (port 8004) - Audio transcription (interview questions)
 - **📺 Teleprompter** (port 8005) - On-screen display for answers
-- **🗄️ PostgreSQL** - Vector database for embeddings
+- **📋 MCP Server** (port 8003) - Multi-Chain Planning + ReAct + RAG reasoning stack
+- **🗄️ PostgreSQL** - Vector database for embeddings and PAT data
 - **⚡ Redis** - Cache and session storage
 - **☁️ MinIO** - Object storage for documents
 
+PAT Core Services (NEW - Feb 2026):
+- **🤖 PAT Core API** (port 8010) - Central personal assistant with calendar, email, and task management
+  - **Calendar Management**: Smart scheduling, conflict detection, AI-powered optimization
+  - **Email Processing**: Auto-classification, summarization, reply drafting, task extraction
+  - **Task Management**: AI prioritization, Apple Reminders integration
+  - **Apple Integration**: macOS AppleScript bridge for Calendar, Mail, Reminders
+- **🔄 Sync Workers** - Background workers for bi-directional sync with Apple apps
+  - Calendar sync worker (`PAT-cal`)
+  - Email sync worker (`Mail`)
+  - Reminders sync worker
+
 Enterprise Services (Optional):
-- **🔧 APAT Service** (port 8010) - Automation Prompt & Analytics Toolkit
 - **🌐 BFF Service** (port 8020) - Backend for Frontend GraphQL API
 - **📊 RAG Scoring** (port 8030) - Market opportunity scoring engine
 - **📈 Market Ingest** (port 8040) - Market data ingestion service
@@ -29,20 +40,31 @@ Enterprise Services (Optional):
 
 ### Key Features
 
-Core Features:
+Interview Assistant Features:
 - 🔒 **100% Local Processing** - No data leaves your machine
 - 🤖 **DeepSeek-V3.1 Integration** - Powerful local LLM via Ollama
 - 📚 **RAG System** - Retrieves relevant info from your documents
 - 📺 **Real-time Teleprompter** - Professional answer display
 - 🎙️ **Whisper Transcription** - Converts speech to text
 
+Personal Assistant (PAT Core) Features (NEW - Feb 2026):
+- 📅 **Smart Calendar** - AI-powered scheduling, conflict detection, Apple Calendar sync
+- 📧 **Email Intelligence** - Auto-classification, summarization, reply drafting, task extraction
+- ✅ **Task Management** - AI prioritization, Apple Reminders integration
+- 🍎 **Apple Integration** - Seamless sync with macOS Calendar, Mail, and Reminders via AppleScript
+- 🧠 **Llama 3.2 3B** - Fast, efficient local LLM for personal tasks
+- 🔗 **MCP Reasoning Stack** - Multi-Chain Planning + ReAct + RAG for complex tasks
+- 🔄 **Background Sync** - Automated bidirectional sync workers
+
 Enterprise Features:
-- 🏢 **Calendar Management** - AI-enhanced scheduling and conflict resolution
-- 📧 **Email Processing** - Automatic classification and response suggestions
-- 📋 **Task Management** - Intelligent task prioritization and tracking
-- 📈 **Market Intelligence** - RAG scoring for business opportunities
+- 🏢 **Business Intelligence** - Market opportunity analysis with RAG scoring
 - 📄 **Document Generation** - Business plans, SOWs, RFPs with LLM assistance
-- 📊 **Business Analytics** - Insights from market and competitive data
+- 📊 **Analytics Dashboard** - GraphQL API for business insights
+- 🔔 **Push Notifications** - Real-time alerts for opportunities and updates
+
+Frontend & Mobile:
+- 📱 **iOS Client** - Swift/SwiftUI mobile app for on-the-go access
+- 📡 **GraphQL API** - Unified backend for frontend applications
 
 ## 🚀 Quick Start
 
@@ -84,14 +106,17 @@ docker-compose up -d
 docker ps | grep backend
 ```
 
-#### 3. Start Enterprise Services (Optional)
-For advanced business capabilities, start the enterprise services:
+#### 4. Install Ollama Models
 ```bash
-# Start enterprise services
-docker-compose -f docker-compose.enterprise.yml up -d
+# Install Ollama from https://ollama.com if not already installed
 
-# Verify enterprise services are running
-docker ps | grep enterprise
+# Pull required models
+ollama pull deepseek-v3.1:671b-cloud
+ollama pull nomic-embed-text
+ollama pull llama3.2:3b  # NEW - for PAT Core personal assistant features
+
+# Verify models
+ollama list
 ```
 
 #### 3. Install Ollama Models
