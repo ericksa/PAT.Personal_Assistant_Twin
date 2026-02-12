@@ -4,7 +4,7 @@ Handles document search, upload, and management for the PAT knowledge base
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import httpx
 import os
 
@@ -16,26 +16,28 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
 
 async def search_documents(
-    query: str, top_k: int = 5, threshold: float = 0.2
+    query: str,
+    top_k: int = 5,
+    threshold: float = 0.2,
+    domain: Optional[str] = None,
+    category: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Search through uploaded documents using vector similarity search.
-
-    Args:
-        query: Search query for document retrieval
-        top_k: Number of results to return (default: 5)
-        threshold: Similarity threshold for filtering results (default: 0.2)
-
-    Returns:
-        Dictionary with search results and metadata
     """
     try:
-        logger.info(f"Searching documents for query: {query}")
+        logger.info(f"Searching documents for query: {query} [Domain: {domain}]")
 
         async with httpx.AsyncClient() as client:
+            payload = {"query": query, "top_k": top_k, "threshold": threshold}
+            if domain:
+                payload["domain"] = domain
+            if category:
+                payload["category"] = category
+
             response = await client.post(
                 f"{INGEST_SERVICE_URL}/search",
-                json={"query": query, "top_k": top_k, "threshold": threshold},
+                json=payload,
                 timeout=30.0,
             )
 
@@ -50,7 +52,9 @@ async def search_documents(
                         {
                             "filename": result.get("filename", "Unknown"),
                             "content": result.get("content", ""),
-                            "similarity": result.get("similarity", 0.0),
+                            "score": result.get("score", 0.0),
+                            "domain": result.get("domain", "general"),
+                            "category": result.get("category"),
                             "metadata": result.get("metadata", {}),
                         }
                     )
@@ -58,6 +62,7 @@ async def search_documents(
                 return {
                     "success": True,
                     "query": query,
+                    "domain": domain,
                     "results": formatted_results,
                     "total_results": len(formatted_results),
                 }
@@ -75,21 +80,13 @@ async def search_documents(
 
 
 async def upload_document(
-    file_path: str, chunk_size: int = 800, chunk_overlap: int = 120
+    file_path: str, domain: str = "general", category: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Upload a document to the RAG knowledge base.
-
-    Args:
-        file_path: Path to file to upload
-        chunk_size: Text chunk size for processing (default: 800)
-        chunk_overlap: Text chunk overlap (default: 120)
-
-    Returns:
-        Dictionary with upload status and document ID
+    Upload a document to the RAG knowledge base with domain isolation.
     """
     try:
-        logger.info(f"Uploading document: {file_path}")
+        logger.info(f"Uploading document: {file_path} [Domain: {domain}]")
 
         # Validate file exists
         if not os.path.exists(file_path):
@@ -100,7 +97,9 @@ async def upload_document(
                 files = {
                     "file": (os.path.basename(file_path), f, "application/octet-stream")
                 }
-                data = {"chunk_size": chunk_size, "chunk_overlap": chunk_overlap}
+                data = {"domain": domain}
+                if category:
+                    data["category"] = category
 
                 response = await client.post(
                     f"{INGEST_SERVICE_URL}/upload",
@@ -111,12 +110,13 @@ async def upload_document(
 
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"Document uploaded successfully: {result}")
+                logger.info(f"Document upload queued successfully: {result}")
                 return {
                     "success": True,
-                    "document_id": result.get("document_id"),
+                    "job_id": result.get("job_id"),
                     "filename": result.get("filename"),
-                    "chunks_processed": result.get("chunks_processed", 0),
+                    "domain": result.get("domain"),
+                    "status": result.get("status"),
                 }
             else:
                 logger.error(f"Upload failed with status {response.status_code}")
@@ -162,3 +162,23 @@ async def list_documents() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"List documents error: {e}", exc_info=True)
         return {"success": False, "error": str(e), "documents": []}
+
+
+async def get_ingestion_status(job_id: str) -> Dict[str, Any]:
+    """
+    Check the status of an asynchronous ingestion job.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{INGEST_SERVICE_URL}/job/{job_id}", timeout=10.0
+            )
+            if response.status_code == 200:
+                return {"success": True, "status": response.json()}
+            else:
+                return {
+                    "success": False,
+                    "error": f"Status check failed: {response.status_code}",
+                }
+    except Exception as e:
+        return {"success": False, "error": str(e)}

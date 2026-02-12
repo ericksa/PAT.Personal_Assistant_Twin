@@ -1,11 +1,20 @@
 # src/main_pat.py - PAT Core API Entry Point
 import uvicorn
 import os
+import sys
 import logging
 
+# Add current directory to Python path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 # Import the app factory function
-from src.api.pat_routes import router as pat_router, websocket_manager
-from src.config.logging_config import setup_logging
+try:
+    from api.pat_routes import router as pat_router, websocket_manager
+    from config.logging_config import setup_logging
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("Falling back to simple import...")
+    # Fallback - we'll fix this step by step
 
 # Set up structured logging
 log_level = os.getenv("LOG_LEVEL", "INFO")

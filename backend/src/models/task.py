@@ -43,7 +43,7 @@ class Task(BaseModel):
     source: TaskSource = TaskSource.PAT
     related_email_id: Optional[UUID] = None
     related_event_id: Optional[UUID] = None
-    list_name: str = Field(default="Reminders")
+    list_name: str = Field(default="High")
     ai_generated: bool = False
     estimated_duration_minutes: Optional[int] = Field(
         None, description="Estimated time to complete"
@@ -81,7 +81,7 @@ class TaskCreate(BaseModel):
     priority: int = 0
     status: TaskStatus = TaskStatus.PENDING
     reminder_date: Optional[datetime] = None
-    list_name: str = "Reminders"
+    list_name: str = "High"
     estimated_duration_minutes: Optional[int] = None
     tags: List[str] = []
     source: TaskSource = TaskSource.PAT

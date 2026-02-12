@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PAT Service Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #10a37f;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --text: #2d3436;
+            --border: #dfe6e9;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 24px;
+        }
+        .header h1 { margin: 0; font-size: 24px; color: var(--primary); }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-running { background: #e1f5fe; color: #0288d1; }
+        .status-stopped { background: #f5f5f5; color: #616161; }
+        .status-error { background: #ffebee; color: #c62828; }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { border: 1px solid var(--border); background: transparent; }
+        
+        .upload-section {
+            margin-top: 24px;
+            padding: 24px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 2px dashed var(--border);
+        }
+
+        .port-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 24px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .port-table th, .port-table td {
+            padding: 12px 20px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>PAT Command Center</h1>
+                <p>System Health & Document Ingestion</p>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <a href="chat.html" class="btn btn-primary"><i class="fas fa-comment"></i> AI Chat</a>
+                <a href="http://localhost:3001" target="_blank" class="btn btn-outline"><i class="fas fa-chart-line"></i> Grafana</a>
+            </div>
+        </div>
+
+        <div class="grid" id="service-grid">
+            <!-- Services will be loaded here -->
+        </div>
+
+        <div class="upload-section">
+            <h3><i class="fas fa-file-upload"></i> Knowledge Ingestion (Ingest V2)</h3>
+            <div style="display: flex; gap: 20px; align-items: flex-end;">
+                <div style="flex: 1;">
+                    <label>File Upload</label>
+                    <input type="file" id="file-input" style="display: block; margin-top: 8px;">
+                </div>
+                <div>
+                    <label>Domain</label>
+                    <select id="domain-select" style="display: block; margin-top: 8px; padding: 8px;">
+                        <option value="professional">Professional</option>
+                        <option value="personal">Personal</option>
+                        <option value="health">Health</option>
+                        <option value="general">General</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="handleUpload()">Upload to Brain</button>
+            </div>
+            <div id="upload-status" style="margin-top: 12px; font-size: 14px;"></div>
+        </div>
+
+        <table class="port-table">
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Port</th>
+                    <th>Purpose</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Open WebUI</td><td>3000</td><td>Local LLM Interface</td><td>✅ Shared</td></tr>
+                <tr><td>Grafana</td><td>3001</td><td>System Monitoring</td><td>✅ Moved</td></tr>
+                <tr><td>PAT Core</td><td>8010</td><td>Host Bridge (AppleScript)</td><td>✅ Active</td></tr>
+                <tr><td>Ingest V3</td><td>8001</td><td>Asynchronous RAG Ingest</td><td>✅ Active</td></tr>
+                <tr><td>Agent</td><td>8002</td><td>LangGraph Reasoning</td><td>✅ Active</td></tr>
+                <tr><td>MCP</td><td>8003</td><td>Multi-Chain Planning</td><td>✅ Active</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        async function loadServices() {
+            try {
+                const res = await fetch(`${API_BASE}/services`);
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+                const grid = document.getElementById('service-grid');
+                grid.innerHTML = data.map(s => `
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3 style="margin:0">${s.name}</h3>
+                            <span class="status-badge status-${s.status}">${s.status}</span>
+                        </div>
+                        <p style="font-size: 14px; color: #636e72; min-height: 40px;">${s.description}</p>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-outline" onclick="controlService('${s.id}', 'start')" ${s.status === 'running' ? 'disabled' : ''}>Start</button>
+                            <button class="btn btn-outline" onclick="controlService('${s.id}', 'stop')" ${s.status !== 'running' ? 'disabled' : ''}>Stop</button>
+                            <button class="btn btn-outline" onclick="viewLogs('${s.id}')">Logs</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) { 
+                console.error(e);
+                document.getElementById('service-grid').innerHTML = '<div class="error-message">Error connecting to Manager API</div>';
+            }
+        }
+
+        async function controlService(id, action) {
+            try {
+                const res = await fetch(`${API_BASE}/services/${id}/${action}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    loadServices();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (e) { alert('Failed to reach API'); }
+        }
+
+        function viewLogs(id) {
+            window.open(`${API_BASE}/services/${id}/logs`, '_blank');
+        }
+
+        async function handleUpload() {
+            const file = document.getElementById('file-input').files[0];
+            const domain = document.getElementById('domain-select').value;
+            const status = document.getElementById('upload-status');
+            
+            if (!file) return alert('Select a file');
+            
+            status.innerText = '📤 Uploading...';
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('domain', domain);
+
+            try {
+                const res = await fetch('http://localhost:8001/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                status.innerHTML = `✅ Queued! Job ID: <small>${data.job_id}</small>`;
+                // Polling for status
+                checkJob(data.job_id);
+            } catch (e) { status.innerText = '❌ Error uploading'; }
+        }
+
+        async function checkJob(id) {
+            const status = document.getElementById('upload-status');
+            const res = await fetch(`http://localhost:8001/job/${id}`);
+            const data = await res.json();
+            if (data.status === 'completed') {
+                status.innerText = '🎉 Ingestion complete!';
+            } else if (data.status === 'failed') {
+                status.innerText = '❌ Failed: ' + data.error;
+            } else {
+                status.innerText = `⏳ Processing: ${Math.round(data.progress.percent)}%`;
+                setTimeout(() => checkJob(id), 2000);
+            }
+        }
+
+        setInterval(loadServices, 5000);
+        loadServices();
+    </script>
+</body>
+</html>

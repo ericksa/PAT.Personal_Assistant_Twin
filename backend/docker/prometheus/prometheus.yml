@@ -31,6 +31,18 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
+  # Ingest Service
+  - job_name: 'ingest-service'
+    static_configs:
+      - targets: ['ingest-service:8000']
+    metrics_path: '/metrics'
+
+  # Agent Service
+  - job_name: 'agent-service'
+    static_configs:
+      - targets: ['agent-service:8000']
+    metrics_path: '/metrics'
+
 # Optional: Config for monitoring Docker containers
 #  - job_name: 'docker'
 #    static_configs:

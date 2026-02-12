@@ -1,6 +1,11 @@
 """MCP Handlers Package"""
 
-from .rag_handlers import search_documents, upload_document, list_documents
+from .rag_handlers import (
+    search_documents,
+    upload_document,
+    list_documents,
+    get_ingestion_status,
+)
 from .react_handlers import reason_step, create_plan, execute_plan_step
 from .memory_handlers import store_memory, retrieve_memory, search_memory
 from .action_handlers import (
@@ -15,6 +20,7 @@ from .pat_core_handlers import (
     sync_calendar,
     list_tasks,
     create_task,
+    sync_tasks,
     process_email,
 )
 
@@ -23,6 +29,7 @@ __all__ = [
     "search_documents",
     "upload_document",
     "list_documents",
+    "get_ingestion_status",
     # ReAct handlers
     "reason_step",
     "create_plan",

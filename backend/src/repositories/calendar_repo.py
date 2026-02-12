@@ -248,12 +248,137 @@ class CalendarRepository:
     async def sync_from_apple_calendar(
         self, calendar_name: str = DEFAULT_CALENDAR, hours_back: int = 24
     ) -> SyncResult:
-        """Placeholder for Apple Calendar sync"""
-        calendars = list_calendars()
-        return SyncResult(
-            synced=0,
-            updated=0,
-            errors=0,
-            conflicts=0,
-            details={"message": "Sync not implemented", "calendars": calendars},
-        )
+        """Sync events from Apple Calendar"""
+        from datetime import datetime, timedelta
+        import asyncio
+
+        try:
+            # Calculate date range
+            start_date = datetime.now() - timedelta(hours=hours_back)
+            end_date = datetime.now()
+
+            # AppleScript to get events from specific calendar
+            script = f'''
+            tell application "Calendar"
+                set startDate to date "{start_date.strftime("%A, %B %d, %Y at %I:%M:%S %p")}"
+                set endDate to date "{end_date.strftime("%A, %B %d, %Y at %I:%M:%S %p")}"
+                set eventList to {{}}
+                
+                tell calendar "{calendar_name}"
+                    repeat with currentEvent in (every event whose start date ≥ startDate and start date ≤ endDate)
+                        set eventInfo to {{
+                            title:(title of currentEvent),
+                            description:(description of currentEvent),
+                            start_date:(start date of currentEvent as string),
+                            end_date:(end date of currentEvent as string),
+                            location:(location of currentEvent),
+                            uid:(uid of currentEvent)
+                        }}
+                        set end of eventList to eventInfo
+                    end repeat
+                end tell
+                
+                return eventList as list
+            end tell
+            '''
+
+            # Import AppleScriptManager
+            from src.utils.applescript.base_manager import AppleScriptManager
+
+            applescript = AppleScriptManager()
+
+            # Execute script
+            events_data = await applescript.run_applescript(script)
+
+            synced = 0
+            updated = 0
+            errors = 0
+
+            if events_data and isinstance(events_data, list):
+                for event_info in events_data:
+                    try:
+                        # Parse event data (simplified)
+                        if isinstance(event_info, dict):
+                            title = event_info.get("title", "Untitled Event")
+                            description = event_info.get("description", "")
+                            start_date_str = event_info.get("start_date", "")
+                            end_date_str = event_info.get("end_date", "")
+                            location = event_info.get("location", "")
+                            external_id = event_info.get("uid", "")
+
+                            # Convert dates
+                            try:
+                                from datetime import datetime
+
+                                start_dt = datetime.strptime(
+                                    start_date_str, "%A, %B %d, %Y at %I:%M:%S %p"
+                                )
+                                end_dt = datetime.strptime(
+                                    end_date_str, "%A, %B %d, %Y at %I:%M:%S %p"
+                                )
+
+                                # Check if event exists
+                                existing = await self.get_events_by_date_range(
+                                    start_dt - timedelta(hours=1),
+                                    end_dt + timedelta(hours=1),
+                                    user_id=self.DEFAULT_USER_ID,
+                                )
+
+                                event_exists = any(
+                                    e.get("title") == title
+                                    and e.get("start_time").date() == start_dt.date()
+                                    for e in existing
+                                )
+
+                                if not event_exists:
+                                    # Create new event
+                                    event_data = {
+                                        "title": title,
+                                        "description": description,
+                                        "start_time": start_dt,
+                                        "end_time": end_dt,
+                                        "location": location,
+                                        "calendar_name": calendar_name,
+                                        "sync_status": "synced",
+                                        "external_event_id": external_id,
+                                    }
+
+                                    await self.create_event(event_data)
+                                    synced += 1
+                                else:
+                                    updated += 1
+
+                            except Exception as e:
+                                logger.warning(
+                                    f"Date parsing error for event '{title}': {e}"
+                                )
+                                errors += 1
+
+                    except Exception as e:
+                        logger.error(f"Error processing event: {e}")
+                        errors += 1
+
+            return SyncResult(
+                synced=synced,
+                updated=updated,
+                errors=errors,
+                conflicts=0,
+                details={
+                    "message": f"Synced {synced} events, updated {updated} existing",
+                    "calendar": calendar_name,
+                    "date_range": f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Calendar sync failed: {e}")
+            return SyncResult(
+                synced=0,
+                updated=0,
+                errors=1,
+                conflicts=0,
+                details={
+                    "message": f"Sync failed: {str(e)}",
+                    "calendars": list_calendars(),
+                },
+            )

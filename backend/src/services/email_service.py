@@ -266,7 +266,7 @@ class EmailService:
         return created_tasks
 
     async def extract_meetings(self, email_id: str, user_id_str: str) -> List[dict]:
-        """Extract meeting requests from an email using AI"""
+        """Extract meeting requests from an email using AI with enhanced calendar integration"""
         user_id = (
             UUID(user_id_str)
             if user_id_str
@@ -283,21 +283,75 @@ class EmailService:
         if not meeting_details:
             return []
 
-        # Convert meeting_details to calendar event
-        event_create = CalendarEventCreate(
-            title=meeting_details.get("title", f"Meeting from: {email.get('subject')}"),
-            description=meeting_details.get("description", ""),
-            start_time=datetime.now(),
-            end_time=datetime.now() + timedelta(hours=1),
-            location=meeting_details.get("location"),
-        )
+        # Enhanced meeting extraction with better calendar integration
+        created_events = []
 
-        # Add user_id manually
-        event_data = event_create.model_dump()
-        event_data["user_id"] = str(user_id)
+        # Validate meeting details and convert to proper datetime
+        if meeting_details.get("date") and meeting_details.get("time"):
+            try:
+                # Create proper datetime objects
+                from datetime import datetime, timedelta
 
-        event = await self.calendar_repo.create_event(event_data)
-        return [event] if event else []
+                # Merge date and time strings into datetime objects
+                meeting_datetime_str = (
+                    f"{meeting_details['date']} {meeting_details.get('time', '00:00')}"
+                )
+                start_dt = datetime.strptime(meeting_datetime_str, "%Y-%m-%d %H:%M")
+
+                # Calculate end time (if duration provided or default to 1 hour)
+                duration_min = meeting_details.get("duration_minutes", 60)
+                end_dt = start_dt + timedelta(minutes=duration_min)
+
+                # Get attendees list
+                attendees = meeting_details.get("attendees", [])
+                attendees_list = ", ".join(attendees) if attendees else ""
+
+                # Create enhanced event with proper defaults
+                event_create = CalendarEventCreate(
+                    title=meeting_details.get(
+                        "title", f"Meeting from: {email.get('subject')}"
+                    ),
+                    description=f"From email: {email.get('subject')}\nAttendees: {attendees_list}\n\n{meeting_details.get('description', '')}",
+                    start_time=start_dt,
+                    end_time=end_dt,
+                    location=meeting_details.get("location", ""),
+                    priority=5,  # Default medium priority for meeting invitations
+                )
+
+                # Add user_id manually
+                event_data = event_create.model_dump()
+                event_data["user_id"] = str(user_id)
+                event_data["related_email_id"] = email_id  # Link to email
+
+                # Create calendar event
+                event = await self.calendar_repo.create_event(event_data)
+                if event:
+                    created_events.append(event)
+
+            except Exception as e:
+                logger.error(f"Failed to process meeting details: {e}")
+                # Create a basic event as fallback
+                event_create = CalendarEventCreate(
+                    title=meeting_details.get(
+                        "title", f"Meeting from: {email.get('subject')}"
+                    ),
+                    description=meeting_details.get("description", ""),
+                    start_time=datetime.now(),
+                    end_time=datetime.now() + timedelta(hours=1),
+                    location=meeting_details.get("location"),
+                    priority=5,
+                )
+
+                # Add user_id manually
+                event_data = event_create.model_dump()
+                event_data["user_id"] = str(user_id)
+                event_data["related_email_id"] = email_id  # Link to email
+
+                event = await self.calendar_repo.create_event(event_data)
+                if event:
+                    created_events.append(event)
+
+        return created_events
 
     async def batch_classify_recent(self, user_id: str, limit: int = 20) -> dict:
         """Batch classify recent unclassified emails"""

@@ -96,9 +96,52 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
     # RAG Tools
     "rag_search": ToolDefinition(
         name="rag_search",
-        description="Search through uploaded documents (resume, technical docs) to find relevant information. Returns document chunks with similarity scores.",
-        input_schema=RAGSearchInput.model_json_schema(),
+        description="Search through the knowledge base using semantic search with domain isolation",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "domain": {
+                    "type": "string",
+                    "description": "Optional: professional, personal, health",
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Optional: resumes, medical, etc.",
+                },
+                "top_k": {"type": "integer", "default": 5},
+            },
+            "required": ["query"],
+        },
         handler="mcp.handlers.rag_handlers.search_documents",
+        category="rag",
+    ),
+    "rag_upload": ToolDefinition(
+        name="rag_upload",
+        description="Upload a document for ingestion into the knowledge base with domain isolation",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string"},
+                "domain": {"type": "string", "default": "general"},
+                "category": {"type": "string"},
+            },
+            "required": ["file_path"],
+        },
+        handler="mcp.handlers.rag_handlers.upload_document",
+        category="rag",
+    ),
+    "rag_status": ToolDefinition(
+        name="rag_status",
+        description="Check the status of a background ingestion job",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "job_id": {"type": "string"},
+            },
+            "required": ["job_id"],
+        },
+        handler="mcp.handlers.rag_handlers.get_ingestion_status",
         category="rag",
     ),
     "rag_upload": ToolDefinition(
@@ -304,6 +347,19 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
             },
         },
         handler="mcp.handlers.pat_core_handlers.process_email",
+        category="pat_core",
+    ),
+    "pat_task_sync": ToolDefinition(
+        name="pat_task_sync",
+        description="Sync with Apple Reminders (High list) via PAT Core",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "list_name": {"type": "string", "default": "High"},
+                "limit": {"type": "integer", "default": 50},
+            },
+        },
+        handler="mcp.handlers.pat_core_handlers.sync_tasks",
         category="pat_core",
     ),
 }

@@ -2,7 +2,7 @@
 import logging
 import os
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 
 import httpx
 import psycopg2
@@ -10,20 +10,19 @@ import redis
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Gauge, Counter
 from pydantic import BaseModel
 
-# Import utility functions and LangChain components
-import sys
-import os
-import logging
+# ... existing code ...
 
-# Add current directory to Python path for Docker compatibility
-sys.path.append("/app")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-# Setup logger early
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Custom metrics
+RAG_SIMILARITY_SCORE = Gauge(
+    "rag_similarity_score",
+    "Average similarity score of retrieved documents",
+    ["query_domain"],
+)
+AGENT_REQUEST_COUNT = Counter("agent_requests_total", "Total agent queries", ["status"])
 
 # Initialize global variables
 is_question = None
@@ -196,6 +195,8 @@ resume_generator = None
 class QueryRequest(BaseModel):
     query: str
     user_id: str = "default"
+    domain: Optional[str] = None
+    category: Optional[str] = None
     stream: bool = False
     tools: List[str] = []
 
@@ -206,6 +207,7 @@ class QueryResponse(BaseModel):
     tools_used: List[str] = []
     model_used: str = "pat-agent"
     processing_time: float = 0.0
+    domain: Optional[str] = None
 
 
 class WebSearchResult(BaseModel):
@@ -349,10 +351,22 @@ async def process_interview_input(request: InterviewRequest):
 async def query_agent(request: QueryRequest):
     """Main query endpoint - orchestrates RAG + web search + tools"""
     start_time = datetime.now()
+    AGENT_REQUEST_COUNT.labels(status="received").inc()
 
     try:
-        # 1. Search local documents
-        local_results = await search_local_documents(request.query)
+        # 1. Search local documents with domain isolation
+        local_results = await search_local_documents(
+            request.query, domain=request.domain, category=request.category
+        )
+
+        # Record similarity scores if available
+        if local_results:
+            avg_score = sum(r.get("score", 0) for r in local_results) / len(
+                local_results
+            )
+            RAG_SIMILARITY_SCORE.labels(query_domain=request.domain or "all").set(
+                avg_score
+            )
 
         # 2. Perform web search if needed
         web_results = []
@@ -373,6 +387,7 @@ async def query_agent(request: QueryRequest):
             tools_used=[],
             model_used=LLM_PROVIDER,
             processing_time=processing_time,
+            domain=request.domain,
         )
 
     except Exception as e:
@@ -385,13 +400,21 @@ async def query_agent(request: QueryRequest):
         )
 
 
-async def search_local_documents(query: str) -> List[Dict]:
-    """Search local documents via ingest service"""
+async def search_local_documents(
+    query: str, domain: Optional[str] = None, category: Optional[str] = None
+) -> List[Dict]:
+    """Search local documents via ingest service with domain filtering"""
     try:
         async with httpx.AsyncClient() as client:
+            payload = {"query": query, "top_k": TOP_K}
+            if domain:
+                payload["domain"] = domain
+            if category:
+                payload["category"] = category
+
             response = await client.post(
                 f"{INGEST_SERVICE_URL}/search",
-                json={"query": query, "top_k": TOP_K},
+                json=payload,
                 timeout=30,
             )
             if response.status_code == 200:
