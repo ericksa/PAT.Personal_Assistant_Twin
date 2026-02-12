@@ -6,25 +6,28 @@ This document serves as the master index for all documentation in the PAT system
 
 ### Core System Documentation
 - [README.md](../README.md) - Main project overview and quick start guide
-- [docs/CHANGES.md](CHANGES.md) - Change log and version history
-- [docs/CONTRIBUTING.md](CONTRIBUTING.md) - Development guidelines
-- [docs/FUTURE_ENHANCEMENTS.md](FUTURE_ENHANCEMENTS.md) - Planned features roadmap
+- [Changes Log](CHANGES.md) - Change log and version history
+- [Contributing](CONTRIBUTING.md) - Development guidelines
+- [Implementation Status](../PAT_CORE_IMPLEMENTATION_STATUS.md) - Latest development updates
+- [Future Roadmap](FUTURE_ENHANCEMENTS.md) - Planned features roadmap
 
 ### Enterprise Capabilities
-- [docs/new_capabilities.md](new_capabilities.md) - Overview of new enterprise capabilities
-- [docs/ENTERPRISE_GUIDE.md](ENTERPRISE_GUIDE.md) - Detailed enterprise features guide
-- [docs/FRONTEND_API_REFERENCE.md](FRONTEND_API_REFERENCE.md) - API specification for frontend communication
-- [docs/BACKEND_REPOSITORY_UPDATES.md](BACKEND_REPOSITORY_UPDATES.md) - Backend repository enhancements
+- [New Capabilities](new_capabilities.md) - Overview of new enterprise capabilities
+- [Enterprise Guide](ENTERPRISE_GUIDE.md) - Detailed enterprise features guide
+- [Frontend API Reference](../FRONTEND_API_REFERENCE.md) - API specification for frontend communication
+- [Backend Repository Updates](BACKEND_REPOSITORY_UPDATES.md) - Backend repository enhancements
+- [Infrastructure Setup](../INFRASTRUCTURE.md) - Metrics, logging, and observability details
 
 ### Technical Deep Dives
-- [docs/ARCHITECTURE.md](ARCHITECTURE.md) - System architecture details
-- [docs/JOB_SEARCH_SETUP.md](JOB_SEARCH_SETUP.md) - Job search specific configuration
-- [docs/PHASE_3_ENHANCEMENTS.md](PHASE_3_ENHANCEMENTS.md) - Phase 3 development updates
+- [System Architecture](ARCHITECTURE.md) - System architecture details
+- [Job Search Setup](JOB_SEARCH_SETUP.md) - Job search specific configuration
+- [Phase 3 Enhancements](PHASE_3_ENHANCEMENTS.md) - Phase 3 development updates
 
 ### Operations and Maintenance
-- [docs/LAUNCHAGENT_GUIDE.md](LAUNCHAGENT_GUIDE.md) - macOS LaunchAgent setup guide
-- [scripts/test_pat_api.sh](../scripts/test_pat_api.sh) - Automated API testing script
-- [scripts/start_sync_workers.sh](../scripts/start_sync_workers.sh) - Sync worker startup script
+- [LaunchAgent Guide](LAUNCHAGENT_GUIDE.md) - macOS LaunchAgent setup guide
+- [macOS Manager App](../macOS/PATManager/README.md) - Native control application guide
+- [API Diagnostic Script](../scripts/test_pat_api.sh) - Automated API testing script
+- [Sync Worker Control](../scripts/start_sync_workers.sh) - Sync worker startup script
 
 ## 🏢 Enterprise Services Documentation
 
