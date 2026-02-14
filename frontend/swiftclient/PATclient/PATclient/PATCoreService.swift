@@ -351,24 +351,3 @@ enum PATCoreError: Error, LocalizedError {
         }
     }
 }
-
-struct PartialCalendarEvent: Codable {
-    var title: String?
-    var description: String?
-    var startDate: String?
-    var startTime: String?
-    var endDate: String?
-    var endTime: String?
-    var location: String?
-    var eventType: String?
-    var priority: Int?
-    
-    enum CodingKeys: String, CodingKey {
-        case title, description, location, priority
-        case startDate = "start_date"
-        case startTime = "start_time"
-        case endDate = "end_date"
-        case endTime = "end_time"
-        case eventType = "event_type"
-    }
-}

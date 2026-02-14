@@ -53,3 +53,5 @@ backend/pat_out.txt
 backend/pat_out.txt
 backend/pat_out.txt
 /frontend/web-manager/node_modules
+/frontend/swiftclient/PATclient/build/SwiftExplicitPrecompiledModules
+/frontend/swiftclient/PATclient/build

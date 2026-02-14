@@ -34,6 +34,41 @@ struct CalendarEvent: Identifiable, Codable, Hashable {
     static func == (lhs: CalendarEvent, rhs: CalendarEvent) -> Bool {
         lhs.id == rhs.id
     }
+
+    var toPartial: PartialCalendarEvent {
+        PartialCalendarEvent(
+            title: title,
+            description: description,
+            startDate: startDate,
+            startTime: startTime,
+            endDate: endDate,
+            endTime: endTime,
+            location: location,
+            eventType: eventType,
+            priority: priority
+        )
+    }
+}
+
+struct PartialCalendarEvent: Codable {
+    var title: String?
+    var description: String?
+    var startDate: String?
+    var startTime: String?
+    var endDate: String?
+    var endTime: String?
+    var location: String?
+    var eventType: String?
+    var priority: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case title, description, location, priority
+        case startDate = "start_date"
+        case startTime = "start_time"
+        case endDate = "end_date"
+        case endTime = "end_time"
+        case eventType = "event_type"
+    }
 }
 
 struct CalendarResponse: Codable {

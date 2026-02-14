@@ -49,7 +49,7 @@ class CalendarViewModel: ObservableObject {
         guard let id = event.id else { return }
 
         do {
-            try await service.updateEvent(id: id, event: event)
+            try await service.updateEvent(id: id, event: event.toPartial)
             if let index = events.firstIndex(where: { $0.id == id }) {
                 events[index] = event
             }

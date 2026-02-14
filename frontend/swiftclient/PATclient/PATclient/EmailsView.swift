@@ -192,7 +192,9 @@ struct EmailsView: View {
         )) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text(viewModel.errorMessage ?? "")
+            if let message = viewModel.errorMessage {
+                Text(message)
+            }
         }
     }
 
@@ -317,12 +319,6 @@ struct ModernEmailRow: View {
                 }
 
                 Spacer()
-
-                if email.hasAttachments {
-                    Image(systemName: "paperclip")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
         }
         .padding(.vertical, 4)
@@ -485,7 +481,7 @@ struct EmailDetailView: View {
                 Divider()
 
                 // Body
-                if let body = email.body {
+                if let body = email.bodyText {
                     Text(body)
                         .font(.body)
                         .lineSpacing(4)
