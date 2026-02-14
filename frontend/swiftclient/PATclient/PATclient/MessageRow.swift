@@ -202,14 +202,13 @@ struct MessageRow: View {
     }
     
     private func sourceIcon(for source: Source) -> String {
-        switch source.sourceType {
-        case .web:
+        // Determine icon based on source properties
+        if let url = source.url, !url.isEmpty {
             return "globe"
-        case .document:
+        } else if source.filename != nil {
             return "doc.text"
-        case .unknown:
-            return "questionmark.circle"
         }
+        return "questionmark.circle"
     }
 }
 

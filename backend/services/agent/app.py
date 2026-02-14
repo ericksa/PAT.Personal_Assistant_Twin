@@ -1,137 +1,20 @@
-# services/agent/app.py
+# services/agent/app.py - Fixed version
 import logging
 import os
 from datetime import datetime
 from typing import List, Dict, Optional, Any
+import asyncio
 
-import httpx
-import psycopg2
-import redis
+try:
+    import httpx
+except ImportError:
+    import requests as httpx
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from prometheus_fastapi_instrumentator import Instrumentator
-from prometheus_client import Gauge, Counter
 from pydantic import BaseModel
 
-# ... existing code ...
-
-# Custom metrics
-RAG_SIMILARITY_SCORE = Gauge(
-    "rag_similarity_score",
-    "Average similarity score of retrieved documents",
-    ["query_domain"],
-)
-AGENT_REQUEST_COUNT = Counter("agent_requests_total", "Total agent queries", ["status"])
-
-# Initialize global variables
-is_question = None
-build_context_from_results = None
-InterviewAssistant = None
-process_interview_question = None
-
-
-def initialize_langchain_components():
-    """Simplified LangChain initialization with clear error handling"""
-    global \
-        is_question, \
-        build_context_from_results, \
-        InterviewAssistant, \
-        process_interview_question
-
-    component_status = {}
-
-    # Test each component individually with detailed logging
-    try:
-        from utils import is_question as utils_is_question
-
-        is_question = utils_is_question
-        component_status["utils"] = "✓ OK"
-        logger.info("✓ utils imported successfully")
-    except ImportError as e:
-        component_status["utils"] = f"✗ Error: {e}"
-        logger.error(f"Failed to import utils: {e}")
-
-    try:
-        from interview_assistant import InterviewAssistant as LC_InterviewAssistant
-
-        InterviewAssistant = LC_InterviewAssistant
-        component_status["interview_assistant"] = "✓ OK"
-        logger.info("✓ InterviewAssistant imported successfully")
-    except ImportError as e:
-        component_status["interview_assistant"] = f"✗ Error: {e}"
-        logger.error(f"Failed to import InterviewAssistant: {e}")
-
-    try:
-        from langgraph_workflow import (
-            process_interview_question as lg_process_interview_question,
-        )
-
-        process_interview_question = lg_process_interview_question
-        component_status["langgraph_workflow"] = "✓ OK"
-        logger.info("✓ LangGraph workflow imported successfully")
-    except ImportError as e:
-        component_status["langgraph_workflow"] = f"✗ Error: {e}"
-        logger.error(f"Failed to import LangGraph workflow: {e}")
-
-    # Check if all components loaded successfully
-    all_ok = all("✓ OK" in status for status in component_status.values())
-
-    if all_ok:
-        logger.info("🎉 All LangChain components initialized successfully")
-        return True
-    else:
-        logger.warning(f"LangChain initialization incomplete: {component_status}")
-
-        # Create basic fallback functions if needed
-        if "✗ Error" in component_status.get("utils", ""):
-
-            def is_question_default(text):
-                """Default question detection"""
-                question_words = [
-                    "what",
-                    "how",
-                    "why",
-                    "when",
-                    "where",
-                    "who",
-                    "can",
-                    "could",
-                    "would",
-                    "should",
-                ]
-                text_lower = text.lower().strip()
-                return (
-                    any(text_lower.startswith(word) for word in question_words)
-                    or "?" in text
-                )
-
-            is_question = is_question_default
-            build_context_from_results = lambda x: "No context available"
-
-        if "✗ Error" in component_status.get("interview_assistant", ""):
-            pass  # Will use None value
-
-        if "✗ Error" in component_status.get("langgraph_workflow", ""):
-
-            async def process_interview_question_fallback(question):
-                """Fallback interview processing"""
-                return {
-                    "status": "processed",
-                    "response": f"Fallback response for: {question}",
-                    "is_question": True,
-                }
-
-            process_interview_question = process_interview_question_fallback
-
-        # Only return True if at least 2/3 components loaded
-        return len([s for s in component_status.values() if "✓ OK" in s]) >= 2
-
-
-# Initialize components when module loads
-initialize_langchain_components()
-
-
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -179,17 +62,14 @@ app.add_middleware(
 )
 
 # Configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://llm:llm@postgres:5432/llm")
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mlx")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-INGEST_SERVICE_URL = "http://ingest-service:8000"
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://llm:llm@localhost:5432/llm")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "lm_studio")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LM_STUDIO_BASE_URL = os.getenv("LM_STUDIO_BASE_URL", "http://localhost:1234")
+INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://localhost:8001")
 TOP_K = int(os.getenv("TOP_K", "5"))
 SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.2"))
-
-# Initialize clients
-redis_client = redis.from_url(REDIS_URL)
-resume_generator = None
 
 
 class QueryRequest(BaseModel):
@@ -251,78 +131,55 @@ async def websocket_endpoint(websocket: WebSocket):
 # Endpoint to process live interview input
 @app.post("/interview/process")
 async def process_interview_input(request: InterviewRequest):
-    """Process live interview input and send response to teleprompter using LangGraph workflow"""
+    """Process live interview input and send response to teleprompter"""
     question = request.text
     logger.info(f"Processing interview question: {question}")
 
     try:
-        # Process through LangGraph workflow (more intelligent and faster)
-        # Check if LangChain components are available
-        if process_interview_question is not None:
-            result = await process_interview_question(question)
+        # Simple question detection
+        is_question = any(
+            word in question.lower()
+            for word in ["what", "how", "why", "when", "where", "who", "?"]
+        )
 
-            # If it's not a question, just acknowledge
-            if not result.get("is_question", True):
-                logger.info(f"Text doesn't appear to be a question: {question}")
-                return {"status": "received", "question": question, "processed": False}
+        if not is_question:
+            logger.info(f"Text doesn't appear to be a question: {question}")
+            return {"status": "received", "question": question, "processed": False}
 
-            response_text = result["response"]
-        else:
-            # Fallback to basic processing if LangChain is not available
-            logger.warning("LangChain components not available, using basic processing")
+        # Get context from local documents
+        local_results = await search_local_documents(question)
 
-            # Check if this is actually a question
-            if is_question and not is_question(question):
-                logger.info(f"Text doesn't appear to be a question: {question}")
-                return {"status": "received", "question": question, "processed": False}
+        # Build simple context
+        context = "Relevant information:\n"
+        for result in local_results[:3]:
+            context += f"- {result.get('filename', 'Document')}: {result.get('content', '')[:300]}...\n"
 
-            # Get context from local documents
-            local_results = await search_local_documents(question)
+        # Get AI response using configured provider
+        response_text = await get_ai_response(question, context)
 
-            # Get web search results if needed
-            web_results = []
-            if should_use_web_search(question, local_results):
-                web_results = await search_web(question)
-
-            # Build context from both local and web results
-            context = build_context(local_results, web_results)
-
-            # Get AI response using basic method
-            try:
-                from .llm import get_ai_response
-            except ImportError:
-                try:
-                    from llm import get_ai_response
-                except ImportError:
-                    # Fallback for when running directly
-                    async def get_ai_response(question, context, is_interview=False):
-                        """Fallback AI response function"""
-                        return f"Fallback response for question: {question}"
-
-            response_text = await get_ai_response(question, context, is_interview=True)
-
-        # Send response to teleprompter service
+        # Send response to teleprompter service (if available)
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "http://teleprompter-app:8000/broadcast",
-                    json={"message": response_text},
-                    timeout=10,  # Even faster timeout for LangGraph
-                )
-                if response.status_code == 200:
-                    logger.info(f"Successfully sent response to teleprompter service")
-                else:
-                    logger.error(
-                        f"Teleprompter service returned {response.status_code}: {response.text}"
+            if hasattr(httpx, "AsyncClient"):
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        "http://localhost:8005/broadcast",
+                        json={"message": response_text},
+                        timeout=10,
                     )
+            else:
+                # Fallback for requests library
+                response = httpx.post(
+                    "http://localhost:8005/broadcast",
+                    json={"message": response_text},
+                    timeout=10,
+                )
+            logger.info(f"Successfully sent response to teleprompter service")
         except Exception as e:
-            logger.error(f"Error sending to teleprompter service: {e}")
+            logger.warning(f"Could not send to teleprompter service: {e}")
 
-        logger.info(f"Sent response to teleprompter: {response_text[:100]}...")
+        logger.info(f"Processed question: {response_text[:100]}...")
         return {
-            "status": "processed"
-            if process_interview_question is not None
-            else "processed_basic",
+            "status": "processed",
             "question": question,
             "response": response_text,
         }
@@ -330,20 +187,6 @@ async def process_interview_input(request: InterviewRequest):
     except Exception as e:
         logger.error(f"Error processing interview question: {e}")
         error_message = f"Error processing question: {str(e)}"
-
-        # Send error to teleprompter service
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    "http://teleprompter-app:8000/broadcast",
-                    json={"message": error_message},
-                    timeout=10,
-                )
-        except Exception as broadcast_error:
-            logger.error(
-                f"Error sending error to teleprompter service: {broadcast_error}"
-            )
-
         return {"status": "error", "question": question, "error": str(e)}
 
 
@@ -351,22 +194,12 @@ async def process_interview_input(request: InterviewRequest):
 async def query_agent(request: QueryRequest):
     """Main query endpoint - orchestrates RAG + web search + tools"""
     start_time = datetime.now()
-    AGENT_REQUEST_COUNT.labels(status="received").inc()
 
     try:
         # 1. Search local documents with domain isolation
         local_results = await search_local_documents(
             request.query, domain=request.domain, category=request.category
         )
-
-        # Record similarity scores if available
-        if local_results:
-            avg_score = sum(r.get("score", 0) for r in local_results) / len(
-                local_results
-            )
-            RAG_SIMILARITY_SCORE.labels(query_domain=request.domain or "all").set(
-                avg_score
-            )
 
         # 2. Perform web search if needed
         web_results = []
@@ -405,14 +238,24 @@ async def search_local_documents(
 ) -> List[Dict]:
     """Search local documents via ingest service with domain filtering"""
     try:
-        async with httpx.AsyncClient() as client:
-            payload = {"query": query, "top_k": TOP_K}
-            if domain:
-                payload["domain"] = domain
-            if category:
-                payload["category"] = category
+        payload = {"query": query, "top_k": TOP_K}
+        if domain:
+            payload["domain"] = domain
+        if category:
+            payload["category"] = category
 
-            response = await client.post(
+        if hasattr(httpx, "AsyncClient"):
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{INGEST_SERVICE_URL}/search",
+                    json=payload,
+                    timeout=30,
+                )
+                if response.status_code == 200:
+                    return response.json()
+        else:
+            # Fallback for requests library
+            response = httpx.post(
                 f"{INGEST_SERVICE_URL}/search",
                 json=payload,
                 timeout=30,
@@ -421,13 +264,12 @@ async def search_local_documents(
                 return response.json()
         return []
     except Exception as e:
-        logger.error(f"Document search error: {e}")
+        logger.warning(f"Document search failed: {e}")
         return []
 
 
 def should_use_web_search(query: str, local_results: List[Dict]) -> bool:
     """Determine if web search is needed"""
-    # If no local results or query asks for current info
     current_keywords = [
         "current",
         "today",
@@ -446,30 +288,33 @@ async def search_web(query: str) -> List[WebSearchResult]:
     """Perform web search using DuckDuckGo"""
     try:
         import urllib.parse
-        import httpx
 
-        # Simple DuckDuckGo search (you can enhance this)
+        # Simple DuckDuckGo search
         url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1"
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=10)
+        if hasattr(httpx, "AsyncClient"):
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, timeout=10)
+                data = response.json()
+        else:
+            response = httpx.get(url, timeout=10)
             data = response.json()
 
-            results = []
-            if data.get("AbstractText"):
-                results.append(
-                    WebSearchResult(
-                        title=data.get("Heading", "DuckDuckGo Result"),
-                        content=data.get("AbstractText", ""),
-                        url=data.get("AbstractURL", ""),
-                        source="duckduckgo",
-                    )
+        results = []
+        if data.get("AbstractText"):
+            results.append(
+                WebSearchResult(
+                    title=data.get("Heading", "DuckDuckGo Result"),
+                    content=data.get("AbstractText", ""),
+                    url=data.get("AbstractURL", ""),
+                    source="duckduckgo",
                 )
+            )
 
-            return results
+        return results
 
     except Exception as e:
-        logger.error(f"Web search error: {e}")
+        logger.warning(f"Web search failed: {e}")
         return []
 
 
@@ -495,6 +340,7 @@ def build_context(local_results: List[Dict], web_results: List[WebSearchResult])
 async def get_ai_response(query: str, context: str) -> str:
     """Get AI response using configured LLM provider"""
     logger.info(f"get_ai_response called with query: {query}")
+
     prompt = f"""You are PAT (Personal Assistant Twin). Use the following information to answer the user's question.
 
 {context}
@@ -503,147 +349,102 @@ Question: {query}
 
 Answer:"""
 
-    if LLM_PROVIDER == "mlx":
-        # For MLX, we assume it's running locally
-        # In a real implementation, you'd call your MLX service
-        return f"This would be handled by your MLX service. Query: {query}"
-    elif LLM_PROVIDER == "ollama":
-        logger.info("Entering Ollama processing block")
+    if LLM_PROVIDER == "lm_studio":
         try:
-            logger.info(f"Making request to Ollama at: {OLLAMA_BASE_URL}/api/generate")
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
+            if hasattr(httpx, "AsyncClient"):
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{LM_STUDIO_BASE_URL}/v1/chat/completions",
+                        json={
+                            "model": "glm-4.6v-flash",
+                            "messages": [{"role": "user", "content": prompt}],
+                            "temperature": 0.7,
+                            "max_tokens": 2048,
+                        },
+                        timeout=120,
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        return (
+                            data.get("choices", [{}])[0]
+                            .get("message", {})
+                            .get("content", "No response from LM Studio")
+                        )
+                    else:
+                        return f"LM Studio error: {response.status_code}"
+            else:
+                response = httpx.post(
+                    f"{LM_STUDIO_BASE_URL}/v1/chat/completions",
+                    json={
+                        "model": "glm-4.6v-flash",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.7,
+                        "max_tokens": 2048,
+                    },
+                    timeout=120,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return (
+                        data.get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "No response from LM Studio")
+                    )
+                else:
+                    return f"LM Studio error: {response.status_code}"
+        except Exception as e:
+            logger.error(f"LM Studio error: {e}")
+            return f"Error communicating with LM Studio: {str(e)}"
+
+    elif LLM_PROVIDER == "ollama":
+        try:
+            if hasattr(httpx, "AsyncClient"):
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{OLLAMA_BASE_URL}/api/generate",
+                        json={"model": "llama3:8b", "prompt": prompt, "stream": False},
+                        timeout=120,
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        return data.get("response", "No response from Ollama")
+                    else:
+                        return f"Ollama error: {response.status_code}"
+            else:
+                response = httpx.post(
                     f"{OLLAMA_BASE_URL}/api/generate",
                     json={"model": "llama3:8b", "prompt": prompt, "stream": False},
                     timeout=120,
                 )
-                logger.info(f"Ollama response status: {response.status_code}")
                 if response.status_code == 200:
                     data = response.json()
-                    logger.info(f"Ollama response data: {data}")
                     return data.get("response", "No response from Ollama")
                 else:
-                    logger.error(
-                        f"Ollama error status: {response.status_code}, response text: {response.text}"
-                    )
-                    return "Unable to get response from Ollama"
+                    return f"Ollama error: {response.status_code}"
         except Exception as e:
-            logger.error(f"Ollama error: {e}", exc_info=True)
-            return "Error communicating with Ollama"
+            logger.error(f"Ollama error: {e}")
+            return f"Error communicating with Ollama: {str(e)}"
     else:
         return f"Unsupported LLM provider: {LLM_PROVIDER}"
-
-
-# Add new endpoint for resume generation
-@app.post("/generate-resume")
-async def generate_resume(request: dict):
-    """Generate customized resume for specific job"""
-    try:
-        # Get resume data from database
-        resume_data = await get_latest_resume()
-
-        if not resume_data:
-            raise HTTPException(status_code=404, detail="No resume found")
-
-        # Generate customized resume
-        job_description = request.get("job_description", "")
-        template_type = request.get("template_type", "chronological")
-
-        if resume_generator:
-            customized_resume = resume_generator.generate_resume(
-                resume_data, job_description, template_type
-            )
-
-            return {
-                "status": "success",
-                "resume": customized_resume,
-                "message": "Resume generated successfully",
-            }
-        else:
-            raise HTTPException(
-                status_code=500, detail="Resume generator not available"
-            )
-
-    except Exception as e:
-        logger.error(f"Resume generation error: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Resume generation failed: {str(e)}"
-        )
-
-
-async def get_latest_resume():
-    """Get the most recent resume from database"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{INGEST_SERVICE_URL}/resumes", timeout=30)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("resumes"):
-                    # Return the latest resume data
-                    return data["resumes"][0].get("metadata", {}).get("resume_data", {})
-        return None
-    except Exception as e:
-        logger.error(f"Get resume error: {e}")
-        return None
 
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     try:
-        # Check database connection
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.close()
-        db_healthy = True
-    except:
-        db_healthy = False
-
-    try:
-        # Check Redis connection
-        redis_client.ping()
-        redis_healthy = True
-    except:
-        redis_healthy = False
-
-    try:
-        # Check ingest service
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{INGEST_SERVICE_URL}/health", timeout=5)
-            ingest_healthy = response.status_code == 200
-    except:
-        ingest_healthy = False
-
-    return {
-        "status": "healthy"
-        if all([db_healthy, redis_healthy, ingest_healthy])
-        else "degraded",
-        "services": {
-            "database": "healthy" if db_healthy else "unhealthy",
-            "redis": "healthy" if redis_healthy else "unhealthy",
-            "ingest": "healthy" if ingest_healthy else "unhealthy",
-            "llm_provider": LLM_PROVIDER,
-        },
-    }
-
-
-@app.get("/interview/display", response_class=HTMLResponse)
-async def interview_display():
-    """Serve the interview teleprompter display"""
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Interview Teleprompter</title>
-    </head>
-    <body>
-        <h1>Interview Teleprompter</h1>
-        <div id="content">Waiting for content...</div>
-        <script>
-            console.log("Connected to interview WebSocket");
-        </script>
-    </body>
-    </html>
-    """
+        # Simple health check
+        return {
+            "status": "healthy",
+            "services": {
+                "llm_provider": LLM_PROVIDER,
+                "ingest_url": INGEST_SERVICE_URL,
+            },
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+        }
 
 
 if __name__ == "__main__":
@@ -651,4 +452,4 @@ if __name__ == "__main__":
 
     print("🤖 PAT Agent Service starting...")
     print(f"🧠 LLM Provider: {LLM_PROVIDER}")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8002)

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var selectedTab = 0
+    @StateObject private var chatViewModel = ChatViewModel()
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -36,8 +37,8 @@ struct ContentView: View {
                 }
                 .tag(3)
         }
-        .padding()
-        .frame(minWidth: 800, minHeight: 600)
+        .frame(minWidth: 900, minHeight: 700)
+        .environmentObject(chatViewModel)
     }
 }
 

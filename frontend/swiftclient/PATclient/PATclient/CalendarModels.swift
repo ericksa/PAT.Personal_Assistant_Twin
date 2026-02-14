@@ -1,6 +1,6 @@
 import Foundation
 
-struct CalendarEvent: Identifiable, Codable {
+struct CalendarEvent: Identifiable, Codable, Hashable {
     let id: UUID?
     var title: String
     var description: String?
@@ -11,7 +11,7 @@ struct CalendarEvent: Identifiable, Codable {
     var location: String?
     var eventType: String
     var priority: Int?
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case title
@@ -23,6 +23,16 @@ struct CalendarEvent: Identifiable, Codable {
         case location
         case eventType = "event_type"
         case priority
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id ?? UUID())
+        hasher.combine(title)
+        hasher.combine(startDate)
+    }
+
+    static func == (lhs: CalendarEvent, rhs: CalendarEvent) -> Bool {
+        lhs.id == rhs.id
     }
 }
 

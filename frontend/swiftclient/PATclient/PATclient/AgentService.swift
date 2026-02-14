@@ -5,7 +5,6 @@
 //  Created by Adam Erickson on 1/22/26.
 //
 
-
 //
 //  AgentService.swift
 //  PATclient
@@ -41,7 +40,7 @@ class AgentService {
         }
     }
     
-    func query(text: String, webSearch: Bool, useMemory: Bool = true, userId: String = "default", stream: Bool = false) async throws -> QueryResponse {
+    func query(text: String, webSearch: Bool, useMemory: Bool = true, userId: String = "default", stream: Bool = false, llmProvider: String = "ollama", model: String? = nil) async throws -> QueryResponse {
         var tools: [String] = []
         if webSearch {
             tools.append("web")
@@ -50,7 +49,14 @@ class AgentService {
             tools.append("memory")
         }
         
-        let request = QueryRequest(query: text, user_id: userId, stream: stream, tools: tools)
+        var request = QueryRequest(
+            query: text,
+            user_id: userId,
+            stream: stream,
+            tools: tools,
+            llm_provider: llmProvider,
+            model: model
+        )
         
         guard let url = URL(string: "\(baseURL)/query") else {
             throw AgentError.invalidURL
@@ -93,10 +99,20 @@ class AgentService {
 
 struct QueryResponse: Codable {
     let response: String
-    let sources: [Source]
+    let sources: [AgentSource]
     let tools_used: [String]
     let model_used: String
     let processing_time: Double
+}
+
+struct AgentSource: Codable {
+    let content: String
+    let filename: String?
+    let score: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case content, filename, score
+    }
 }
 
 enum AgentError: Error, LocalizedError {

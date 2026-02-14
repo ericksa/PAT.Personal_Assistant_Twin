@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -20,8 +21,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global instance of managers
-python_manager: PythonProcessManager = None
-docker_manager: DockerManager = None
+python_manager: Optional[PythonProcessManager] = None
+docker_manager: Optional[DockerManager] = None
 
 
 @asynccontextmanager
@@ -72,8 +73,9 @@ async def lifespan(app: FastAPI):
         logger.info("Shutting down PAT Service Manager")
 
         # Stop all Python services
-        logger.info("Stopping all Python services")
-        python_manager.stop_all_services()
+        if python_manager:
+            logger.info("Stopping all Python services")
+            python_manager.stop_all_services()
 
         # Stop Docker services? (Optional - we'll leave Docker containers running)
         # docker_manager.stop_all_containers()
