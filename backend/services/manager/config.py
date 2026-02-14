@@ -7,7 +7,7 @@ PYTHON_SERVICES = {
         "description": "PAT Core API - Calendar, Email, Tasks, Chat",
         "type": "python",
         "module": None,
-        "script": "src.main_pat",
+        "script": "src.main_pat_full",
         "port": 8010,
         "health_url": "http://localhost:8010/pat/health",
     },

@@ -146,7 +146,7 @@ struct SettingsView: View {
                             Text("No models available").tag(viewModel.selectedModel)
                         }
                     } else {
-                        ForEach(viewModel.availableModels, id: \.self) { model in
+                        ForEach(Array(viewModel.availableModels.enumerated()), id: \.offset) { index, model in
                             Text(model).tag(model)
                         }
                     }

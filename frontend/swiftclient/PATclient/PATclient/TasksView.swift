@@ -20,7 +20,7 @@ struct TasksView: View {
 
                 // Status filter
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(TaskStatus.allCases, id: \.self) { status in
+                    ForEach(Array(TaskStatus.allCases.enumerated()), id: \.offset) { index, status in
                         StatusFilterRow(
                             status: status,
                             count: taskCount(for: status),
@@ -302,7 +302,7 @@ struct ModernTaskRow: View {
 
                     if let tags = task.tags, !tags.isEmpty {
                         HStack(spacing: 4) {
-                            ForEach(tags.prefix(2), id: \.self) { tag in
+                            ForEach(Array(tags.prefix(2).enumerated()), id: \.offset) { index, tag in
                                 TagBadge(text: tag)
                             }
                         }

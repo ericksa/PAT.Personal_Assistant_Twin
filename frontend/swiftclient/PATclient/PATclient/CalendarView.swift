@@ -261,28 +261,22 @@ struct ModernEventRow: View {
                     .foregroundColor(.secondary)
                 }
 
-                HStack(spacing: 12) {
-                    if event.priority > 0 {
-                        PriorityIndicator(priority: event.priority)
+                Spacer()
+
+                Menu {
+                    Button(action: onEdit) {
+                        Label("Edit", systemImage: "pencil")
                     }
 
-                    Spacer()
-
-                    Menu {
-                        Button(action: onEdit) {
-                            Label("Edit", systemImage: "pencil")
-                        }
-
-                        Button(action: onDelete) {
-                            Label("Delete", systemImage: "trash")
-                        }
-                        .foregroundColor(.red)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundColor(.secondary)
+                    Button(action: onDelete) {
+                        Label("Delete", systemImage: "trash")
                     }
-                    .menuStyle(.borderlessButton)
+                    .foregroundColor(.red)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundColor(.secondary)
                 }
+                .menuStyle(.borderlessButton)
             }
 
             Spacer()

@@ -48,7 +48,7 @@ class LlamaLLMService:
                     if temperature is not None
                     else self.config.TEMPERATURE,
                     "top_p": self.config.TOP_P,
-                    "num_ctx": self.config.NUM_CTX_llama32_3b,
+                    "num_ctx": self.config.NUM_CTX,
                 },
             }
 
@@ -548,9 +548,16 @@ Respond in JSON array of task titles in optimal order:
             title_to_id = {
                 str(t.get("title")): str(t.get("id")) for t in tasks if t.get("id")
             }
-            return [
+            ordered_ids = [
                 title_to_id.get(title, title) for title in order if title in title_to_id
             ]
+            # Fill in missing IDs to maintain list of strings
+            final_ids = [
+                str(t.get("id"))
+                for t in tasks
+                if t.get("id") and str(t.get("id")) in ordered_ids
+            ]
+            return final_ids or [str(t.get("id")) for t in tasks if t.get("id")]
         except:
             return [
                 str(t.get("id")) for t in tasks if t.get("id")

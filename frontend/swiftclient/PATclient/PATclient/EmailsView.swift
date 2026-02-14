@@ -59,7 +59,7 @@ struct EmailsView: View {
 
                 // Folders
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(folders, id: \.self) { folder in
+                    ForEach(Array(folders.enumerated()), id: \.element) { index, folder in
                         FolderRow(
                             folder: folder,
                             isSelected: selectedFolder == folder,
