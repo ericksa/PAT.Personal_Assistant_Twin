@@ -36,7 +36,6 @@ final class ChatViewModel: ObservableObject {
     @Published public var isListeningActive: Bool = false
 
     // MARK: - Service Health Methods
-
     /// Check if all required services are healthy
     public func areServicesHealthy() -> Bool {
         let llmHealthy = llmProvider == "lmstudio" ? lmStudioStatus == .healthy : ollamaStatus == .healthy
@@ -173,6 +172,19 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Helper methods
+    private func convertToSource(_ agentSource: AgentSource) -> Source {
+        return Source(
+            id: UUID(),
+            filename: agentSource.filename,
+            content: agentSource.content,
+            url: nil,
+            title: agentSource.filename,  // Use filename as title
+            source: agentSource.filename != nil ? "document" : "unknown",
+            score: agentSource.score
+        )
+    }
+
     /// Send a message
     public func sendMessage() async {
         let messageContent = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -206,7 +218,7 @@ final class ChatViewModel: ObservableObject {
                     type: .assistant,
                     content: response.response,
                     timestamp: Date(),
-                    sources: response.sources,
+                    sources: response.sources.map { self.convertToSource($0) },
                     toolsUsed: response.tools_used,
                     modelUsed: response.model_used,
                     processingTime: response.processing_time
@@ -259,7 +271,7 @@ final class ChatViewModel: ObservableObject {
                     type: .assistant,
                     content: response.response,
                     timestamp: Date(),
-                    sources: response.sources,
+                    sources: response.sources.map { self.convertToSource($0) },
                     toolsUsed: response.tools_used,
                     modelUsed: response.model_used,
                     processingTime: response.processing_time
@@ -560,7 +572,6 @@ final class ChatViewModel: ObservableObject {
 }
 
 // MARK: - Supporting Types (for ChatView compatibility)
-
 enum ServiceStatus: String, Codable {
     case healthy = "healthy"
     case disconnected = "disconnected"
@@ -578,3 +589,4 @@ enum ServiceStatus: String, Codable {
         rawValue.capitalized
     }
 }
+

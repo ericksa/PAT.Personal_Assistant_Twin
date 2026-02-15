@@ -1,21 +1,158 @@
-2026-02-12 05:31:56 - pat-core - INFO - Logging initialized for pat-core (level=INFO)
-2026-02-12 05:31:56 - __main__ - INFO - PAT Core API initialized with Llama 3.2 3B
-2026-02-12 05:31:56 - __main__ - INFO - Starting PAT Core API
-2026-02-12 05:31:56 - uvicorn.error - INFO - Started server process [88447]
-2026-02-12 05:31:56 - uvicorn.error - INFO - Waiting for application startup.
-2026-02-12 05:31:56 - uvicorn.error - INFO - Application startup complete.
-2026-02-12 05:31:56 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8010 (Press CTRL+C to quit)
-2026-02-12 05:32:09 - uvicorn.access - INFO - 127.0.0.1:54433 - "GET /pat/emails/analytics HTTP/1.1" 200
-2026-02-12 05:32:09 - uvicorn.access - INFO - 127.0.0.1:54445 - "GET /pat/emails?limit=5 HTTP/1.1" 200
-2026-02-12 05:32:18 - uvicorn.access - INFO - 127.0.0.1:54448 - "POST /pat/emails/sync?limit=5 HTTP/1.1" 200
-2026-02-12 05:32:23 - uvicorn.access - INFO - 127.0.0.1:54451 - "GET /pat/emails/analytics HTTP/1.1" 200
-2026-02-12 05:32:23 - uvicorn.access - INFO - 127.0.0.1:54453 - "GET /pat/emails?limit=5 HTTP/1.1" 200
-2026-02-12 05:32:24 - uvicorn.access - INFO - 127.0.0.1:54455 - "POST /pat/emails/0f7b1e9c-77c1-4930-b55d-5380b8f7069c/read HTTP/1.1" 200
-2026-02-12 05:32:24 - src.services.llm_service - INFO - Sending request to Ollama: http://localhost:11434/api/generate
-2026-02-12 05:32:28 - httpx - INFO - HTTP Request: POST http://localhost:11434/api/generate "HTTP/1.1 200 OK"
-2026-02-12 05:32:28 - src.services.llm_service - INFO - Got response from Ollama: 400 characters
-2026-02-12 05:32:28 - uvicorn.access - INFO - 127.0.0.1:54457 - "POST /pat/emails/0f7b1e9c-77c1-4930-b55d-5380b8f7069c/classify HTTP/1.1" 200
-2026-02-12 05:32:28 - src.services.llm_service - INFO - Sending request to Ollama: http://localhost:11434/api/generate
-2026-02-12 05:32:29 - httpx - INFO - HTTP Request: POST http://localhost:11434/api/generate "HTTP/1.1 200 OK"
-2026-02-12 05:32:29 - src.services.llm_service - INFO - Got response from Ollama: 300 characters
-2026-02-12 05:32:29 - uvicorn.access - INFO - 127.0.0.1:54470 - "POST /pat/emails/0f7b1e9c-77c1-4930-b55d-5380b8f7069c/summarize HTTP/1.1" 200
+2026-02-12 12:22:14 - pat-core - INFO - Logging initialized for pat-core (level=INFO)
+2026-02-12 12:22:14 - __main__ - INFO - PAT Core API initialized with Llama 3.2 3B
+2026-02-12 12:22:14 - __main__ - INFO - Starting PAT Core API
+2026-02-12 12:22:14 - uvicorn.error - INFO - Started server process [32965]
+2026-02-12 12:22:14 - uvicorn.error - INFO - Waiting for application startup.
+2026-02-12 12:22:14 - uvicorn.error - INFO - Application startup complete.
+2026-02-12 12:22:14 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8010 (Press CTRL+C to quit)
+2026-02-12 12:22:22 - uvicorn.access - INFO - 127.0.0.1:58873 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 12:23:12 - uvicorn.access - INFO - 127.0.0.1:58881 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 12:23:42 - src.utils.applescript.base_manager - ERROR - AppleScript execution timed out
+2026-02-12 12:23:42 - src.services.task_service - ERROR - Sync error: AppleScript execution timed out
+2026-02-12 12:23:42 - uvicorn.access - INFO - 127.0.0.1:58893 - "POST /pat/tasks/sync?limit=5 HTTP/1.1" 200
+2026-02-12 12:23:42 - uvicorn.access - INFO - 127.0.0.1:58947 - "GET /pat/tasks?limit=5 HTTP/1.1" 200
+2026-02-12 12:23:42 - uvicorn.access - INFO - 127.0.0.1:58950 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 12:32:42 - uvicorn.access - INFO - 127.0.0.1:59271 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 12:32:52 - uvicorn.access - INFO - 127.0.0.1:59276 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 12:32:56 - uvicorn.access - INFO - 127.0.0.1:59276 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 12:32:56 - uvicorn.access - INFO - 127.0.0.1:59276 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 12:33:11 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 12:33:11 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 12:33:13 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/tasks?limit=50&status=completed HTTP/1.1" 200
+2026-02-12 12:33:13 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 12:33:13 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/tasks?limit=50&status=cancelled HTTP/1.1" 200
+2026-02-12 12:33:13 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 12:33:15 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 12:33:15 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 12:33:25 - uvicorn.access - INFO - 127.0.0.1:59282 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 12:33:28 - uvicorn.access - INFO - 127.0.0.1:59280 - "POST /pat/emails/sync HTTP/1.1" 200
+2026-02-12 12:33:28 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 12:33:29 - uvicorn.access - INFO - 127.0.0.1:59280 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 12:33:57 - uvicorn.access - INFO - 127.0.0.1:59333 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 12:34:59 - uvicorn.access - INFO - 127.0.0.1:59567 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 12:35:02 - uvicorn.access - INFO - 127.0.0.1:59567 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 12:35:02 - uvicorn.access - INFO - 127.0.0.1:59567 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 12:35:09 - uvicorn.access - INFO - 127.0.0.1:59602 - "GET /pat/tasks?limit=50&status=cancelled HTTP/1.1" 200
+2026-02-12 12:35:09 - uvicorn.access - INFO - 127.0.0.1:59602 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 12:35:11 - uvicorn.access - INFO - 127.0.0.1:59602 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 12:35:11 - uvicorn.access - INFO - 127.0.0.1:59602 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 12:35:14 - uvicorn.access - INFO - 127.0.0.1:59602 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 12:38:00 - uvicorn.access - INFO - 127.0.0.1:59709 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 12:38:00 - uvicorn.access - INFO - 127.0.0.1:59709 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 12:38:01 - uvicorn.access - INFO - 127.0.0.1:59709 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 12:38:04 - uvicorn.access - INFO - 127.0.0.1:59709 - "GET /pat/tasks?limit=50&status=cancelled HTTP/1.1" 200
+2026-02-12 12:38:04 - uvicorn.access - INFO - 127.0.0.1:59709 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 12:38:16 - uvicorn.access - INFO - 127.0.0.1:59712 - "POST /pat/tasks HTTP/1.1" 422
+2026-02-12 12:38:20 - uvicorn.access - INFO - 127.0.0.1:59712 - "POST /pat/tasks/suggest-priorities HTTP/1.1" 200
+2026-02-12 12:38:52 - src.utils.applescript.base_manager - ERROR - AppleScript execution timed out
+2026-02-12 12:38:52 - src.services.task_service - ERROR - Sync error: AppleScript execution timed out
+2026-02-12 12:38:52 - uvicorn.access - INFO - 127.0.0.1:59712 - "POST /pat/tasks/sync HTTP/1.1" 200
+2026-02-12 12:38:52 - uvicorn.access - INFO - 127.0.0.1:59716 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 12:38:52 - uvicorn.access - INFO - 127.0.0.1:59714 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 12:38:52 - uvicorn.access - INFO - 127.0.0.1:59715 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 12:38:52 - uvicorn.access - INFO - 127.0.0.1:59712 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 12:38:52 - uvicorn.access - INFO - 127.0.0.1:59714 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 12:38:52 - uvicorn.access - INFO - 127.0.0.1:59712 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 12:49:21 - uvicorn.access - INFO - 127.0.0.1:59816 - "GET /pat/tasks?limit=50&status=cancelled HTTP/1.1" 200
+2026-02-12 12:49:21 - uvicorn.access - INFO - 127.0.0.1:59816 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:18:37 - uvicorn.access - INFO - 127.0.0.1:60775 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 13:18:44 - uvicorn.access - INFO - 127.0.0.1:60778 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 13:18:57 - uvicorn.access - INFO - 127.0.0.1:60825 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 13:18:57 - uvicorn.access - INFO - 127.0.0.1:60825 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 13:19:15 - uvicorn.access - INFO - 127.0.0.1:60827 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 13:19:15 - uvicorn.access - INFO - 127.0.0.1:60827 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:19:16 - uvicorn.access - INFO - 127.0.0.1:60827 - "GET /pat/tasks?limit=50&status=completed HTTP/1.1" 200
+2026-02-12 13:19:16 - uvicorn.access - INFO - 127.0.0.1:60827 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:19:17 - uvicorn.access - INFO - 127.0.0.1:60827 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 13:19:17 - uvicorn.access - INFO - 127.0.0.1:60827 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:19:36 - uvicorn.access - INFO - 127.0.0.1:60833 - "POST /pat/tasks HTTP/1.1" 422
+2026-02-12 13:19:53 - uvicorn.access - INFO - 127.0.0.1:60834 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 13:22:31 - uvicorn.access - INFO - 127.0.0.1:61108 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 13:22:35 - uvicorn.access - INFO - 127.0.0.1:61108 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 13:22:37 - uvicorn.access - INFO - 127.0.0.1:61108 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 13:22:37 - uvicorn.access - INFO - 127.0.0.1:61108 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 13:22:49 - uvicorn.access - INFO - 127.0.0.1:61111 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 13:22:49 - uvicorn.access - INFO - 127.0.0.1:61111 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:22:50 - uvicorn.access - INFO - 127.0.0.1:61111 - "GET /pat/tasks?limit=50&status=cancelled HTTP/1.1" 200
+2026-02-12 13:22:50 - uvicorn.access - INFO - 127.0.0.1:61111 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:22:50 - uvicorn.access - INFO - 127.0.0.1:61111 - "GET /pat/tasks?limit=50&status=completed HTTP/1.1" 200
+2026-02-12 13:22:50 - uvicorn.access - INFO - 127.0.0.1:61111 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:22:51 - uvicorn.access - INFO - 127.0.0.1:61111 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 13:22:51 - uvicorn.access - INFO - 127.0.0.1:61111 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:23:01 - uvicorn.access - INFO - 127.0.0.1:61113 - "POST /pat/tasks HTTP/1.1" 422
+2026-02-12 13:23:34 - src.utils.applescript.base_manager - ERROR - AppleScript execution timed out
+2026-02-12 13:23:34 - src.services.task_service - ERROR - Sync error: AppleScript execution timed out
+2026-02-12 13:23:34 - uvicorn.access - INFO - 127.0.0.1:61113 - "POST /pat/tasks/sync HTTP/1.1" 200
+2026-02-12 13:23:34 - uvicorn.access - INFO - 127.0.0.1:61117 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 13:23:34 - uvicorn.access - INFO - 127.0.0.1:61113 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 13:23:34 - uvicorn.access - INFO - 127.0.0.1:61115 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 13:23:34 - uvicorn.access - INFO - 127.0.0.1:61114 - "POST /pat/tasks/suggest-priorities HTTP/1.1" 200
+2026-02-12 13:23:34 - uvicorn.access - INFO - 127.0.0.1:61113 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:23:34 - uvicorn.access - INFO - 127.0.0.1:61116 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 13:23:34 - uvicorn.access - INFO - 127.0.0.1:61115 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 13:30:34 - uvicorn.access - INFO - 127.0.0.1:61231 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 13:31:07 - uvicorn.access - INFO - 127.0.0.1:61254 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 13:31:10 - uvicorn.access - INFO - 127.0.0.1:61254 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 13:31:10 - uvicorn.access - INFO - 127.0.0.1:61254 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 13:31:15 - uvicorn.access - INFO - 127.0.0.1:61254 - "POST /pat/emails/sync HTTP/1.1" 200
+2026-02-12 13:31:15 - uvicorn.access - INFO - 127.0.0.1:61257 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 13:31:15 - uvicorn.access - INFO - 127.0.0.1:61254 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 13:31:15 - uvicorn.access - INFO - 127.0.0.1:61257 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 13:31:15 - uvicorn.access - INFO - 127.0.0.1:61254 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 13:31:45 - src.utils.applescript.base_manager - ERROR - AppleScript execution timed out
+2026-02-12 13:31:45 - src.services.task_service - ERROR - Sync error: AppleScript execution timed out
+2026-02-12 13:31:45 - uvicorn.access - INFO - 127.0.0.1:61254 - "POST /pat/tasks/sync HTTP/1.1" 200
+2026-02-12 13:31:46 - uvicorn.access - INFO - 127.0.0.1:61257 - "GET /pat/tasks?limit=50&status=completed HTTP/1.1" 200
+2026-02-12 13:31:46 - uvicorn.access - INFO - 127.0.0.1:61258 - "GET /pat/tasks?limit=50&status=cancelled HTTP/1.1" 200
+2026-02-12 13:31:46 - uvicorn.access - INFO - 127.0.0.1:61254 - "POST /pat/tasks HTTP/1.1" 422
+2026-02-12 13:31:46 - uvicorn.access - INFO - 127.0.0.1:61254 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 13:31:46 - uvicorn.access - INFO - 127.0.0.1:61259 - "POST /pat/tasks HTTP/1.1" 422
+2026-02-12 13:31:46 - uvicorn.access - INFO - 127.0.0.1:61262 - "POST /pat/tasks HTTP/1.1" 422
+2026-02-12 13:31:46 - uvicorn.access - INFO - 127.0.0.1:61260 - "POST /pat/tasks HTTP/1.1" 422
+2026-02-12 13:31:46 - uvicorn.access - INFO - 127.0.0.1:61257 - "POST /pat/tasks/suggest-priorities HTTP/1.1" 200
+2026-02-12 13:32:16 - src.utils.applescript.base_manager - ERROR - AppleScript execution timed out
+2026-02-12 13:32:16 - src.services.task_service - ERROR - Sync error: AppleScript execution timed out
+2026-02-12 13:32:16 - uvicorn.access - INFO - 127.0.0.1:61258 - "POST /pat/tasks/sync HTTP/1.1" 200
+2026-02-12 13:32:16 - uvicorn.access - INFO - 127.0.0.1:61259 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 14:00:31 - uvicorn.access - INFO - 127.0.0.1:61558 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 14:00:37 - uvicorn.access - INFO - 127.0.0.1:61561 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 14:00:58 - uvicorn.access - INFO - 127.0.0.1:61566 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 14:20:48 - src.api.pat_routes - ERROR - Failed to extract meeting: invalid input for query argument $1: 'test-email-id' (invalid UUID 'test-email-id': length must be between 32..36 characters, got 13)
+2026-02-12 14:20:48 - uvicorn.access - INFO - 127.0.0.1:62332 - "POST /pat/emails/test-email-id/extract-meeting HTTP/1.1" 500
+2026-02-12 14:24:21 - uvicorn.access - INFO - 127.0.0.1:62541 - "GET /pat/analytics HTTP/1.1" 404
+2026-02-12 14:26:09 - uvicorn.access - INFO - 127.0.0.1:62565 - "GET /pat/analytics HTTP/1.1" 404
+2026-02-12 14:26:19 - uvicorn.access - INFO - 127.0.0.1:62568 - "GET /docs HTTP/1.1" 200
+2026-02-12 14:26:28 - uvicorn.access - INFO - 127.0.0.1:62570 - "GET /openapi.json HTTP/1.1" 200
+2026-02-12 14:55:24 - uvicorn.access - INFO - 127.0.0.1:63516 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 14:55:27 - src.utils.applescript.base_manager - INFO - Found 10 calendars: ['Vet Tech Solutions', 'LLC', 'Holidays in United States', 'Family', 'PAT-cal', 'Christian Holidays', 'Adam', 'Family', 'Scheduled Reminders', 'Siri Suggestions']
+2026-02-12 14:55:27 - uvicorn.access - INFO - 127.0.0.1:63518 - "POST /pat/calendar/sync/apple?calendar_name=PAT-cal&hours_back=72 HTTP/1.1" 200
+2026-02-12 14:55:49 - uvicorn.access - INFO - 127.0.0.1:63522 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 14:55:52 - src.utils.applescript.base_manager - INFO - Found 10 calendars: ['Vet Tech Solutions', 'LLC', 'Holidays in United States', 'Family', 'PAT-cal', 'Christian Holidays', 'Adam', 'Family', 'Scheduled Reminders', 'Siri Suggestions']
+2026-02-12 14:55:52 - uvicorn.access - INFO - 127.0.0.1:63524 - "POST /pat/calendar/sync/apple?calendar_name=PAT-cal&hours_back=72 HTTP/1.1" 200
+2026-02-12 15:05:07 - uvicorn.access - INFO - 127.0.0.1:64111 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 15:05:19 - uvicorn.access - INFO - 127.0.0.1:64131 - "GET /pat/calendar/events?limit=50 HTTP/1.1" 200
+2026-02-12 15:05:21 - uvicorn.access - INFO - 127.0.0.1:64131 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 15:05:21 - uvicorn.access - INFO - 127.0.0.1:64131 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 15:05:22 - uvicorn.access - INFO - 127.0.0.1:64131 - "GET /pat/tasks?limit=50&status=pending HTTP/1.1" 200
+2026-02-12 15:05:22 - uvicorn.access - INFO - 127.0.0.1:64131 - "GET /pat/tasks/analytics HTTP/1.1" 200
+2026-02-12 15:05:23 - uvicorn.access - INFO - 127.0.0.1:64131 - "GET /pat/emails?limit=50 HTTP/1.1" 200
+2026-02-12 15:05:23 - uvicorn.access - INFO - 127.0.0.1:64131 - "GET /pat/emails/analytics HTTP/1.1" 200
+2026-02-12 15:05:52 - uvicorn.access - INFO - 127.0.0.1:64160 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 15:50:35 - uvicorn.access - INFO - 127.0.0.1:65453 - "POST /pat/tasks HTTP/1.1" 200
+2026-02-12 16:06:53 - src.utils.applescript.base_manager - INFO - Found 10 calendars: ['Vet Tech Solutions', 'LLC', 'Holidays in United States', 'Family', 'PAT-cal', 'Christian Holidays', 'Adam', 'Family', 'Scheduled Reminders', 'Siri Suggestions']
+2026-02-12 16:06:53 - uvicorn.access - INFO - 127.0.0.1:49625 - "POST /pat/calendar/sync/apple?calendar_name=PAT-cal&hours_back=1 HTTP/1.1" 200
+2026-02-12 17:00:23 - uvicorn.access - INFO - 127.0.0.1:54170 - "POST /pat/chat/completions HTTP/1.1" 422
+2026-02-12 17:01:21 - uvicorn.access - INFO - 127.0.0.1:54435 - "POST /pat/chat/completions HTTP/1.1" 422
+2026-02-12 17:01:35 - uvicorn.access - INFO - 127.0.0.1:54498 - "POST /pat/chat/completions HTTP/1.1" 422
+2026-02-12 17:01:39 - uvicorn.access - INFO - 127.0.0.1:54523 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 17:34:23 - uvicorn.access - INFO - 127.0.0.1:63907 - "POST /pat/chat/completions HTTP/1.1" 422
+2026-02-12 17:39:00 - uvicorn.access - INFO - 127.0.0.1:65512 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 17:40:04 - uvicorn.access - INFO - 127.0.0.1:49419 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 17:56:04 - uvicorn.access - INFO - 127.0.0.1:53975 - "POST /pat/chat/completions HTTP/1.1" 422
+2026-02-12 17:56:16 - uvicorn.access - INFO - 127.0.0.1:54060 - "POST /pat/chat/completions HTTP/1.1" 422
+2026-02-12 18:07:08 - uvicorn.access - INFO - 127.0.0.1:57085 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 18:46:48 - uvicorn.access - INFO - 127.0.0.1:52721 - "GET /pat/health HTTP/1.1" 200
+2026-02-12 19:52:07 - uvicorn.error - INFO - Shutting down
+2026-02-12 19:52:07 - uvicorn.error - INFO - Waiting for application shutdown.
+2026-02-12 19:52:07 - uvicorn.error - INFO - Application shutdown complete.
+2026-02-12 19:52:07 - uvicorn.error - INFO - Finished server process [32965]
