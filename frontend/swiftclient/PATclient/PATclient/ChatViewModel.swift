@@ -34,6 +34,10 @@ final class ChatViewModel: ObservableObject {
     // Track listening service process
     private var listeningServiceProcess: Process?
     @Published public var isListeningActive: Bool = false
+    
+    // Speech service
+    @Published public var useSpeech: Bool = false
+    private let speechService = SpeechService.shared
 
     // MARK: - Service Health Methods
     /// Check if all required services are healthy
@@ -225,6 +229,11 @@ final class ChatViewModel: ObservableObject {
                 )
                 self.messages.append(assistantMessage)
                 self.isProcessing = false
+                
+                // Speak the response if speech is enabled
+                if self.useSpeech {
+                    self.speechService.speak(text: response.response)
+                }
 
                 // Save the session with updated messages
                 self.saveCurrentSession()
