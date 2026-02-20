@@ -7,14 +7,21 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "PATManager", targets: ["PATManager"])
+        .executable(
+            name: "PATManager",
+            targets: ["PATManager"]
+        )
     ],
     dependencies: [],
     targets: [
         .executableTarget(
             name: "PATManager",
             dependencies: [],
-            path: "PATManager"
+            path: "PATManager",
+            exclude: ["Info.plist"],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency")
+            ]
         )
     ]
 )
