@@ -30,7 +30,6 @@ class ProcessManager: ObservableObject {
     @Published var isHealthChecking: Bool = false
     
     private(set) var processes: [String: Process] = [:]
-    private var healthCheckTimer: Timer?
     private var logFileHandle: FileHandle?
     private let logFileURL: URL
     
@@ -54,7 +53,6 @@ class ProcessManager: ObservableObject {
     }
     
     deinit {
-        healthCheckTimer?.invalidate()
         logFileHandle?.closeFile()
     }
     
@@ -226,19 +224,21 @@ class ProcessManager: ObservableObject {
     // MARK: - Health Checks
     
     private func startHealthChecks() {
-        healthCheckTimer?.invalidate()
-        healthCheckTimer = Timer.scheduledTimer(withTimeInterval: configuration.healthCheckInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.performHealthChecks()
-            }
-        }
+        stopHealthChecks()
         isHealthChecking = true
         appendLog("Health checks enabled (interval: \(configuration.healthCheckInterval)s)", level: .info)
+        
+        // Use Task with MainActor isolation
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            while self.isHealthChecking {
+                await self.performHealthChecks()
+                try? await Task.sleep(nanoseconds: UInt64(self.configuration.healthCheckInterval * 1_000_000_000))
+            }
+        }
     }
     
     private func stopHealthChecks() {
-        healthCheckTimer?.invalidate()
-        healthCheckTimer = nil
         isHealthChecking = false
         appendLog("Health checks disabled", level: .info)
     }
@@ -263,11 +263,15 @@ class ProcessManager: ObservableObject {
                     let health: ServiceHealth = (200...299).contains(httpResponse.statusCode) 
                         ? .healthy 
                         : .unhealthy("HTTP \(httpResponse.statusCode)")
-                    services[index].status = .running(health: health)
-                    services[index].lastHealthCheck = Date()
+                    await MainActor.run {
+                        services[index].status = .running(health: health)
+                        services[index].lastHealthCheck = Date()
+                    }
                 }
             } catch {
-                services[index].status = .running(health: .unhealthy(error.localizedDescription))
+                await MainActor.run {
+                    services[index].status = .running(health: .unhealthy(error.localizedDescription))
+                }
             }
         }
     }
